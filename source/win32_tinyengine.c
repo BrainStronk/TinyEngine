@@ -1,8 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <stdbool.h>
 
-static bool IsRunning;
+#include "tinyengine_types.h"
+
+static b32 IsRunning;
 
 static LRESULT CALLBACK
 Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
@@ -38,7 +39,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
     if(RegisterClassW(&WindowClass))
     {
-        HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);
+        HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);  // NOTE(zak): At somepoint the window name should reflect the applications name
         if(Window != INVALID_HANDLE_VALUE)
         {
             // TODO(zak): Initalize D3D11 here
