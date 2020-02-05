@@ -3,7 +3,6 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
-
 #include "tinyengine_types.h"
 
 static b32 IsRunning;
@@ -49,9 +48,13 @@ Win32InitD3D11(HWND Window)
             IDXGIAdapter *DXGIAdapter = 0;
             if(DXGIDevice->lpVtbl->GetAdapter(DXGIDevice, &DXGIAdapter) == 0)
             {
+                DXGIDevice->lpVtbl->Release(DXGIDevice);
+
                 IDXGIFactory *DXGIFactory = 0;
                 if(DXGIAdapter->lpVtbl->GetParent(DXGIAdapter, &IID_IDXGIFactory, (void **)&DXGIFactory) == 0)
                 {
+                    DXGIAdapter->lpVtbl->Release(DXGIAdapter);
+
                     int MonitorHz = 60;
                     
                     DEVMODEW DevMode = {0};
@@ -84,6 +87,8 @@ Win32InitD3D11(HWND Window)
 
                     if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, Device, &SwapchainDescription, &Swapchain) == 0)
                     {
+                        DXGIFactory->lpVtbl->Release(DXGIFactory);
+
                         ID3D11Texture2D *Backbuffer = 0;
                         if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, &Backbuffer) == 0)
                         {
@@ -183,32 +188,42 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);  // NOTE(zak): At somepoint the window name should reflect the applications name
         if(Window != INVALID_HANDLE_VALUE)
         {
-            Win32InitD3D11(Window);
-
-            if(ShowWindow(Window, SW_SHOW) == 0)
+            if(Win32InitD3D11(Window))
             {
-                IsRunning = true;
-
-                while(IsRunning)
+                if(ShowWindow(Window, SW_SHOW) == 0)
                 {
-                    MSG Message;
-                    while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
+                    IsRunning = true;
+
+                    while(IsRunning)
                     {
-                        TranslateMessage(&Message);
-                        DispatchMessageW(&Message);
+                        MSG Message;
+                        while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
+                        {
+                            TranslateMessage(&Message);
+                            DispatchMessageW(&Message);
+                        }
+
+                        // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
+                        DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+
+                        float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+                        DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
+                        
+                        // Update App
+                        // Render App
+
+                        Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                     }
-
-                    // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
-                    DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
-
-                    float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-                    DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-                    
-                    // Update App
-                    // Render App
-
-                    Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                 }
+                else
+                {
+                    // TODO(zak): Logging
+                }
+
+                RenderTargetView->lpVtbl->Release(RenderTargetView);               
+                Swapchain->lpVtbl->Release(Swapchain);
+                DeviceContext->lpVtbl->Release(DeviceContext);
+                Device->lpVtbl->Release(Device);
             }
             else
             {
