@@ -23,4 +23,6 @@ typedef float f64;
 #define true 1
 #endif
 
+#define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
+
 #endif // TINYENGINE_TYPES_H
