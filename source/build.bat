@@ -11,6 +11,6 @@ IF NOT EXIST ..\build mkdir ..\build
 
 pushd ..\build
 
-cl -nologo -FC -Zi ..\source\win32_tinyengine.c
+cl -nologo -FC -Zi ..\source\win32_tinyengine.c /link user32.lib
 
 popd
