@@ -15,7 +15,7 @@ TinyEngine is CC0, so before you merge your code into the engine be sure that yo
 ## Style Guide
 
 Snake case for types, structs, and classes:
-`struct my_awesome_struct {}; `
+`typedef struct my_awesome_struct {} my_awesome_struct; `
 
 Functions and methods should be pascal case:
 `
