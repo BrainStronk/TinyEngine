@@ -33,6 +33,8 @@ void ThisIsTheBestFuncEver(int X) {
 }
 ```
 
+With pointers the `*` should always be with the name instead of the type i.e: `void *TheBuffer`
+
 ### General Programming Practices:
 - Keep the code base simple and make abstractions where it makes sense
 - Use normal modern-ish api's that are used in games shipping today
