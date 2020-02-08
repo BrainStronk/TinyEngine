@@ -5,6 +5,234 @@
 
 #include "tinyengine_types.h"
 
+typedef struct win32_digital_button win32_digital_button;
+struct win32_digital_button
+{
+    u32 Up;
+    u32 Down;
+    b32 Pressed;
+    b32 Released;
+
+    b32 WMDown;
+};
+
+typedef struct win32_mouse win32_mouse;
+struct win32_mouse
+{
+    win32_digital_button Left;
+    win32_digital_button Middle;
+    win32_digital_button Right;
+    win32_digital_button Extra1;
+    win32_digital_button Extra2;
+    s16 WheelDelta;
+    s32 X; // TODO(hayden): Vector, or leave as is?
+    s32 Y; // TODO(hayden): Vector, or leave as is?
+    f32 NormX; // TODO(hayden): Is this the normalization Kyryl was requesting?
+    f32 NormY;
+};
+
+// NOTE(hayden): The order here matters for calculation from KEY_0 to KEY_DOWN
+typedef enum te_keys te_keys;
+enum te_keys
+{
+    KEY_0,
+    KEY_1,
+    KEY_2,
+    KEY_3,
+    KEY_4,
+    KEY_5,
+    KEY_6,
+    KEY_7,
+    KEY_8,
+    KEY_9,
+
+    KEY_A,
+    KEY_B,
+    KEY_C,
+    KEY_D,
+    KEY_E,
+    KEY_F,
+    KEY_G,
+    KEY_H,
+    KEY_I,
+    KEY_J,
+    KEY_K,
+    KEY_L,
+    KEY_M,
+    KEY_N,
+    KEY_O,
+    KEY_P,
+    KEY_Q,
+    KEY_R,
+    KEY_S,
+    KEY_T,
+    KEY_U,
+    KEY_V,
+    KEY_W,
+    KEY_X,
+    KEY_Y,
+    KEY_Z,
+
+    KEY_NUMPAD_0,
+    KEY_NUMPAD_1,
+    KEY_NUMPAD_2,
+    KEY_NUMPAD_3,
+    KEY_NUMPAD_4,
+    KEY_NUMPAD_5,
+    KEY_NUMPAD_6,
+    KEY_NUMPAD_7,
+    KEY_NUMPAD_8,
+    KEY_NUMPAD_9,
+    KEY_NUMPAD_MULTIPLY,
+    KEY_NUMPAD_ADD,
+    KEY_NUMPAD_SEPARATOR, // TODO(hayden): What is this? Seems to trigger if any numpad button is pressed..?
+    KEY_NUMPAD_SUBTRACT,
+    KEY_NUMPAD_DECIMAL,
+    KEY_NUMPAD_DIVIDE,
+
+    KEY_F1,
+    KEY_F2,
+    KEY_F3,
+    KEY_F4,
+    KEY_F5,
+    KEY_F6,
+    KEY_F7,
+    KEY_F8,
+    KEY_F9,
+    KEY_F10,
+    KEY_F11,
+    KEY_F12,
+    KEY_F13,
+    KEY_F14,
+    KEY_F15,
+    KEY_F16,
+    KEY_F17,
+    KEY_F18,
+    KEY_F19,
+    KEY_F20,
+    KEY_F21,
+    KEY_F22,
+    KEY_F23,
+    KEY_F24,
+
+    KEY_LEFT,
+    KEY_UP,
+    KEY_RIGHT,
+    KEY_DOWN,
+
+    KEY_BACKSPACE,
+    KEY_TAB,
+    KEY_RETURN,
+    KEY_SPACE,
+    KEY_LSHIFT,
+    KEY_RSHIFT,
+    KEY_LCONTROL,
+    KEY_RCONTROL,
+    KEY_LALT,
+    KEY_RALT,
+    KEY_LSUPER, // Windows Key
+    KEY_RSUPER, // Windows Key
+    KEY_CAPSLOCK,
+
+    KEY_ESCAPE,
+    KEY_PAGEUP,
+    KEY_PAGEDOWN,
+    KEY_HOME,
+    KEY_END,
+    KEY_INSERT,
+    KEY_DELETE,
+    KEY_PAUSE,
+    KEY_NUMLOCK,
+    KEY_SCROLLLOCK, // TODO(hayden): NOT WORKING!!!
+    KEY_PRINTSCREEN,
+
+    // TODO(hayden): Non-US/manufacturer-specific handling
+    KEY_SEMICOLON,
+    KEY_PLUS,
+    KEY_COMMA,
+    KEY_MINUS,
+    KEY_SLASH,
+    KEY_GRAVE,
+    KEY_LBRACKET,
+    KEY_RBRACKET,
+    KEY_BACKSLASH,
+    KEY_QUOTE,
+
+    // TODO(hayden): Most of these values are untested
+    KEY_BROWSER_BACK,
+    KEY_BROWSER_FORWARD,
+    KEY_BROWSER_REFRESH,
+    KEY_BROWSER_STOP,
+    KEY_BROWSER_SEARCH,
+    KEY_BROWSER_FAVORITES,
+    KEY_BROWSER_HOME,
+
+    KEY_VOLUME_MUTE,
+    KEY_VOLUME_UP,
+    KEY_VOLUME_DOWN,
+
+    KEY_MEDIA_NEXT_TRACK,
+    KEY_MEDIA_PREV_TRACK,
+    KEY_MEDIA_STOP,
+    KEY_MEDIA_PLAYPAUSE,
+
+    KEY_LAUNCH_MAIL,
+    KEY_LAUNCH_MEDIASELECT,
+    KEY_LAUNCH_APP1,
+    KEY_LAUNCH_APP2,
+
+    KEY_HELP,
+    KEY_MENU,
+    KEY_PRINT,
+    KEY_SELECT,
+    KEY_EXEC, // TODO(hayden): KEY_EXECUTE was already defined somewhere... Undefine it or leave this as the only abbreviated key?
+    KEY_APPLICATION,
+    KEY_SLEEP,  
+
+    // TODO(hayden): Where are VK_IME_* defined???
+    KEY_IME_ON,
+    KEY_IME_OFF,
+    KEY_IME_MODECHANGE,
+    KEY_IME_CONVERT,
+    KEY_IME_NONCONVERT, 
+    KEY_IME_ACCEPT,
+    KEY_IME_PROCESS,
+
+    KEY_MODE_KANA,
+    KEY_MODE_HANGEUL,
+    KEY_MODE_HANGUL,
+    KEY_MODE_JUNJA,
+    KEY_MODE_FINAL,
+    KEY_MODE_HANJA,
+    KEY_MODE_KANJI,
+
+    KEY_ATTN,
+    KEY_CRSEL,
+    KEY_EXSEL,
+    KEY_EREOF,
+    KEY_PLAY,
+    KEY_ZOOM,
+    KEY_NONAME,
+    KEY_PA1,
+
+    KEY_OEM_1,
+    KEY_OEM_2,
+    KEY_OEM_3,
+    KEY_OEM_4,
+    KEY_OEM_5,
+    KEY_OEM_6,
+    KEY_OEM_7,
+    KEY_OEM_8,
+    KEY_OEM_102,
+    KEY_OEM_SPEC1,
+    KEY_OEM_SPEC2,
+    KEY_OEM_SPEC3,
+    KEY_OEM_CLEAR,
+};
+
+static win32_mouse Win32Mouse;
+static win32_digital_button Win32Keyboard[0xFE];
+
 static b32 IsRunning;
 static ID3D11Device *Device;
 static ID3D11DeviceContext *DeviceContext;
@@ -163,6 +391,819 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             IsRunning = false;
         } break;
 
+        case WM_INPUT:
+        {
+            UINT SizeOfBuffer = sizeof(RAWINPUT);
+            char Data[sizeof(RAWINPUT)] = {0};
+            if(GetRawInputData((HRAWINPUT)LParam, RID_INPUT, Data, &SizeOfBuffer, sizeof(RAWINPUTHEADER)) <= SizeOfBuffer)
+            {
+                RAWINPUT *RawInput = (RAWINPUT *)Data;
+
+                if(RawInput->header.dwType == RIM_TYPEMOUSE)
+                {
+                    // Mouse Buttons & Wheel
+                    USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
+                    switch(CurrentMouseButton)
+                    {
+                        case RI_MOUSE_LEFT_BUTTON_UP:
+                        case RI_MOUSE_LEFT_BUTTON_DOWN:
+                        {
+                            Win32Mouse.Left.WMDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
+                        } break;
+
+                        case RI_MOUSE_MIDDLE_BUTTON_UP:
+                        case RI_MOUSE_MIDDLE_BUTTON_DOWN:
+                        {
+                            Win32Mouse.Middle.WMDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                        } break;
+
+                        case RI_MOUSE_RIGHT_BUTTON_UP:
+                        case RI_MOUSE_RIGHT_BUTTON_DOWN:
+                        {
+                            Win32Mouse.Right.WMDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
+                        } break;
+
+                        case RI_MOUSE_BUTTON_4_UP:
+                        case RI_MOUSE_BUTTON_4_DOWN:
+                        {
+                            Win32Mouse.Extra1.WMDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
+                        } break;
+
+                        case RI_MOUSE_BUTTON_5_UP:
+                        case RI_MOUSE_BUTTON_5_DOWN:
+                        {
+                            Win32Mouse.Extra2.WMDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
+                        } break;
+
+                        case RI_MOUSE_WHEEL:
+                        {
+                            Win32Mouse.WheelDelta = RawInput->data.mouse.usButtonData;
+                        } break;
+
+                        default:
+                        {
+                            // TODO(hayden): Does anything else need to be handled
+                        }
+                    }
+                }
+                else if(RawInput->header.dwType == RIM_TYPEKEYBOARD)
+                {
+                    const RAWKEYBOARD RawKeyboard = RawInput->data.keyboard;
+
+                    UINT VirtualKey = RawKeyboard.VKey;
+                    UINT ScanCode = RawKeyboard.MakeCode;
+                    UINT Flags = RawKeyboard.Flags;
+
+                    if(VirtualKey == 255)
+                    {
+                        // Discard "fake keys" (part of an escaped sequence)
+                        return(0); // TODO(hayden): No return? Break instead or something?
+                    }
+                    else if(VirtualKey == VK_SHIFT)
+                    {
+                        VirtualKey = MapVirtualKeyW(ScanCode, MAPVK_VSC_TO_VK_EX); // Corrects Left/Right Shift w/ VK_LSHIFT/VK_RSHIFT
+                    }
+                    else if(VirtualKey == VK_NUMLOCK)
+                    {
+                        // Corrects PAUSE/BREAK and NUMLOCK having the same scan code.. And a bug--MapVirtualKey doesn't set the extended bit!
+                        ScanCode = (MapVirtualKeyW(VirtualKey, MAPVK_VK_TO_VSC) | 0x100);
+                    }
+
+                    // e0 and e1 are escape sequences used for certain special keys, such as PRINT and PAUSE/BREAK.
+                    const b32 IsE0 = ((Flags & RI_KEY_E0) != 0);
+                    const b32 IsE1 = ((Flags & RI_KEY_E1) != 0);
+
+                    if(IsE1)
+                    {
+                        if(VirtualKey == VK_PAUSE)
+                        {
+                            ScanCode = 0x45; // MapVirtualKey is unable to map VK_PAUSE, so it is mapped by hand
+                        }
+                        else
+                        {
+                            ScanCode = MapVirtualKey(VirtualKey, MAPVK_VK_TO_VSC); // Turns Escape Sequence VirtualKey into correct ScanCode using MapVirtualKey
+                        }
+                    }
+
+                    // Assign the last of the weird ones
+                    switch(VirtualKey)
+                    {
+                        // right-hand CONTROL and ALT have their e0 bit set
+                        case VK_CONTROL:
+                        {
+                            if(IsE0)
+                            {
+                                VirtualKey = VK_RCONTROL; // Keys::RIGHT_CONTROL;
+                            }
+                            else
+                            {
+                                VirtualKey = VK_LCONTROL; // Keys::LEFT_CONTROL;
+                            }
+                        } break;
+
+                        case VK_MENU:
+                        {
+                            if(IsE0)
+                            {
+                                VirtualKey = VK_RMENU;
+                            }
+                            else
+                            {   
+                                VirtualKey = VK_LMENU;
+                            }
+                        } break;
+
+                        // NUMPAD ENTER has its e0 bit set
+                        case VK_RETURN:
+                        {
+                            if(IsE0)
+                            {
+                                VirtualKey = VK_SEPARATOR;
+                            } 
+                        } break;
+
+                        // the standard INSERT, DELETE, HOME, END, PRIOR and NEXT keys will always have their e0 bit set, but the
+                        // corresponding keys on the NUMPAD will not.
+                        case VK_INSERT:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD0;
+                            }
+                        } break;
+
+                        case VK_DELETE:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_DECIMAL;
+                            }
+                        } break;
+
+                        case VK_HOME:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD7;
+                            }
+                        } break;
+
+                        case VK_END:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD1;
+                            }
+                        } break;
+
+                        case VK_PRIOR:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD9;
+                            }
+                        } break;
+
+                        case VK_NEXT:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD3;
+                            }
+                        } break;
+
+                        // the standard arrow keys will always have their e0 bit set, but the
+                        // corresponding keys on the NUMPAD will not.
+                        case VK_LEFT:
+                        {
+                            if(!IsE0)
+                            {
+                                VirtualKey = VK_NUMPAD4;
+                            }
+                        } break;
+
+                        case VK_RIGHT:
+                        {   
+                            if(!IsE0)
+                            { 
+                                VirtualKey = VK_NUMPAD6;
+                            }
+                        } break;
+
+                        case VK_UP:
+                        {   
+                            if(!IsE0)
+                            { 
+                                VirtualKey = VK_NUMPAD8;
+                            }
+                        } break;
+
+                        case VK_DOWN:
+                        {   
+                            if(!IsE0)
+                            { 
+                                VirtualKey = VK_NUMPAD2;
+                            }
+                        } break;
+
+                        // NUMPAD 5 doesn't have its e0 bit set
+                        case VK_CLEAR:
+                        {   
+                            if(!IsE0)
+                            { 
+                                VirtualKey = VK_NUMPAD5;
+                            }
+                        } break;
+                    }
+
+                    b32 IsUp = (Flags & RI_KEY_BREAK);
+                    b32 IsDown = !IsUp;
+                    u32 CurrentKey = 0;
+
+                    // Assign VirtualKey to Engine's te_key enum
+                    switch(VirtualKey)
+                    {
+                        case 0x30:
+                        case 0x31:
+                        case 0x32:
+                        case 0x33:
+                        case 0x34:
+                        case 0x35:
+                        case 0x36:
+                        case 0x37:
+                        case 0x38:
+                        case 0x39:
+                        { // Numbers 0-9
+                            for(int I = 0x30; I <= 0x39; ++I)
+                            {
+                                if(I == VirtualKey)
+                                {
+                                    Win32Keyboard[I - 0x30].WMDown = IsDown;
+                                }
+                            }
+                        } break;
+                        
+                        ///
+
+                        case 0x41:
+                        case 0x42:
+                        case 0x43:
+                        case 0x44:
+                        case 0x45:
+                        case 0x46:
+                        case 0x47:
+                        case 0x48:
+                        case 0x49:
+                        case 0x4A:
+                        case 0x4B:
+                        case 0x4C:
+                        case 0x4D:
+                        case 0x4E:
+                        case 0x4F:
+                        case 0x50:
+                        case 0x51:
+                        case 0x52:
+                        case 0x53:
+                        case 0x54:
+                        case 0x55:
+                        case 0x56:
+                        case 0x57:
+                        case 0x58:
+                        case 0x59:
+                        case 0x5A:
+                        { // Letters A-Z
+                            int Offset = 10;
+                            for(int I = 0x41; I <= 0x5A; ++I)
+                            {
+                                if(I == VirtualKey)
+                                {
+                                    Win32Keyboard[I - (0x41-Offset)].WMDown = IsDown;
+                                }
+                            }
+                        } break;
+
+                        ///
+
+                        case VK_NUMPAD0:
+                        case VK_NUMPAD1:
+                        case VK_NUMPAD2:
+                        case VK_NUMPAD3:
+                        case VK_NUMPAD4:
+                        case VK_NUMPAD5:
+                        case VK_NUMPAD6:
+                        case VK_NUMPAD7:
+                        case VK_NUMPAD8:
+                        case VK_NUMPAD9:
+                        case VK_MULTIPLY:
+                        case VK_ADD:
+                        case VK_SEPARATOR:
+                        case VK_SUBTRACT:
+                        case VK_DECIMAL:
+                        case VK_DIVIDE:
+                        {
+                            int Offset = 10 + 26;
+                            for(int I = VK_NUMPAD0; I <= VK_DIVIDE; ++I)
+                            {
+                                Win32Keyboard[I - (VK_NUMPAD0-Offset)].WMDown = IsDown;
+                            }
+                        } break;
+
+                        ///
+
+                        case VK_F1:
+                        case VK_F2:
+                        case VK_F3:
+                        case VK_F4:
+                        case VK_F5:
+                        case VK_F6:
+                        case VK_F7:
+                        case VK_F8:
+                        case VK_F9:
+                        case VK_F10:
+                        case VK_F11:
+                        case VK_F12:
+                        case VK_F13:
+                        case VK_F14:
+                        case VK_F15:
+                        case VK_F16:
+                        case VK_F17:
+                        case VK_F18:
+                        case VK_F19:
+                        case VK_F20:
+                        case VK_F21:
+                        case VK_F22:
+                        case VK_F23:
+                        case VK_F24:
+                        {
+                            int Offset = 10 + 26 + 16;
+                            for(int I = VK_F1; I <= VK_F24; ++I)
+                            {
+                                Win32Keyboard[I - (VK_F1-Offset)].WMDown = IsDown;
+                            }
+                        } break;
+
+                        ///
+
+                        case VK_LEFT:
+                        case VK_UP:
+                        case VK_RIGHT:
+                        case VK_DOWN:
+                        {
+                            int Offset = 10 + 26 + 16 + 24;
+                            for(int I = VK_LEFT; I <= VK_DOWN; ++I)
+                            {
+                                Win32Keyboard[I - (VK_LEFT-Offset)].WMDown = IsDown;
+                            }
+                        } break;
+
+                        ///
+
+                        case VK_BACK:
+                        {
+                            Win32Keyboard[KEY_BACKSPACE].WMDown = IsDown;
+                        } break;
+
+                        case VK_TAB:
+                        {
+                            Win32Keyboard[KEY_TAB].WMDown = IsDown;
+                        } break;
+
+                        case VK_RETURN:
+                        {
+                            Win32Keyboard[KEY_RETURN].WMDown = IsDown;
+                        } break;
+
+                        case VK_LSHIFT:
+                        {
+                            Win32Keyboard[KEY_LSHIFT].WMDown = IsDown;
+                        } break;
+
+                        case VK_RSHIFT:
+                        {
+                            Win32Keyboard[KEY_RSHIFT].WMDown = IsDown;
+                        } break;
+
+                        case VK_LCONTROL:
+                        {
+                            Win32Keyboard[KEY_LCONTROL].WMDown = IsDown;
+                        } break;
+
+                        case VK_RCONTROL:
+                        {
+                            Win32Keyboard[KEY_RCONTROL].WMDown = IsDown;
+                        } break;
+
+                        case VK_CAPITAL:
+                        {
+                            Win32Keyboard[KEY_CAPSLOCK].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_SPACE:
+                        {
+                            Win32Keyboard[KEY_SPACE].WMDown = IsDown;
+                        } break;
+
+                        case VK_LWIN:
+                        {
+                            Win32Keyboard[KEY_LSUPER].WMDown = IsDown;
+                        } break;
+
+                        case VK_RWIN:
+                        {
+                            Win32Keyboard[KEY_RSUPER].WMDown = IsDown;
+                        } break;
+
+                        case VK_LMENU:
+                        {
+                            Win32Keyboard[KEY_LALT].WMDown = IsDown;
+                        } break;
+
+                        case VK_RMENU:
+                        {
+                            Win32Keyboard[KEY_RALT].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_ESCAPE:
+                        {
+                            Win32Keyboard[KEY_ESCAPE].WMDown = IsDown;
+                        } break;
+
+                        case VK_PRIOR:
+                        {
+                            Win32Keyboard[KEY_PAGEUP].WMDown = IsDown;
+                        } break;
+
+                        case VK_NEXT:
+                        {
+                            Win32Keyboard[KEY_PAGEDOWN].WMDown = IsDown;
+                        } break;
+
+                        case VK_HOME:
+                        {
+                            Win32Keyboard[KEY_HOME].WMDown = IsDown;
+                        } break;
+
+                        case VK_END:
+                        {
+                            Win32Keyboard[KEY_END].WMDown = IsDown;
+                        } break;
+
+                        case VK_INSERT:
+                        {
+                            Win32Keyboard[KEY_INSERT].WMDown = IsDown;
+                        } break;
+
+                        case VK_DELETE:
+                        {
+                            Win32Keyboard[KEY_DELETE].WMDown = IsDown;
+                        } break;
+
+                        case VK_PAUSE:
+                        {
+                            Win32Keyboard[KEY_PAUSE].WMDown = IsDown;
+                        } break;
+
+                        case VK_NUMLOCK:
+                        {
+                            Win32Keyboard[KEY_NUMLOCK].WMDown = IsDown;
+                        } break;
+
+                        case VK_SCROLL: // TODO(hayden): Not being handled correctly!!!
+                        {
+                            Win32Keyboard[KEY_SCROLLLOCK].WMDown = IsDown;
+                        } break;
+
+                        case VK_SNAPSHOT:
+                        {
+                            Win32Keyboard[KEY_PRINTSCREEN].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_OEM_PLUS:
+                        {
+                            Win32Keyboard[KEY_PLUS].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_COMMA:
+                        {
+                            Win32Keyboard[KEY_COMMA].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_MINUS:
+                        {
+                            Win32Keyboard[KEY_MINUS].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_1:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_SEMICOLON].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_1].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_2:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_SLASH].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_2].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_3:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_GRAVE].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_3].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_4:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_LBRACKET].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_4].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_5:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_BACKSLASH].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_5].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_6:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_RBRACKET].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_6].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_7:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_QUOTE].WMDown = IsDown;
+                            Win32Keyboard[KEY_OEM_7].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_8:
+                        {
+                            Win32Keyboard[KEY_OEM_8].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_102:
+                        {
+                            Win32Keyboard[KEY_OEM_102].WMDown = IsDown;
+                        } break;
+
+                        case 0xE1: // OEM Specific
+                        {
+                            Win32Keyboard[KEY_OEM_SPEC1].WMDown = IsDown;
+                        } break;
+
+                        case 0xE3: // OEM Specific
+                        {
+                            Win32Keyboard[KEY_OEM_SPEC2].WMDown = IsDown;
+                        } break;
+
+                        case 0xE4: // OEM Specific
+                        {
+                            Win32Keyboard[KEY_OEM_SPEC3].WMDown = IsDown;
+                        } break;
+
+                        case VK_OEM_CLEAR:
+                        {
+                            Win32Keyboard[KEY_OEM_CLEAR].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_BROWSER_BACK:
+                        {
+                            Win32Keyboard[KEY_BROWSER_BACK].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_FORWARD:
+                        {
+                            Win32Keyboard[KEY_BROWSER_FORWARD].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_REFRESH:
+                        {
+                            Win32Keyboard[KEY_BROWSER_REFRESH].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_STOP:
+                        {
+                            Win32Keyboard[VK_BROWSER_STOP].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_SEARCH:
+                        {
+                            Win32Keyboard[KEY_BROWSER_SEARCH].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_FAVORITES:
+                        {
+                            Win32Keyboard[KEY_BROWSER_FAVORITES].WMDown = IsDown;
+                        } break;
+
+                        case VK_BROWSER_HOME:
+                        {
+                            Win32Keyboard[KEY_BROWSER_HOME].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_VOLUME_MUTE:
+                        {
+                            Win32Keyboard[KEY_VOLUME_MUTE].WMDown = IsDown;
+                        } break;
+
+                        case VK_VOLUME_UP:
+                        {
+                            Win32Keyboard[KEY_VOLUME_UP].WMDown = IsDown;
+                        } break;
+
+                        case VK_VOLUME_DOWN:
+                        {
+                            Win32Keyboard[KEY_VOLUME_DOWN].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_MEDIA_NEXT_TRACK:
+                        {
+                            Win32Keyboard[KEY_MEDIA_NEXT_TRACK].WMDown = IsDown;
+                        } break;
+
+                        case VK_MEDIA_PREV_TRACK:
+                        {
+                            Win32Keyboard[KEY_MEDIA_PREV_TRACK].WMDown = IsDown;
+                        } break;
+
+                        case VK_MEDIA_STOP:
+                        {
+                            Win32Keyboard[KEY_MEDIA_STOP].WMDown = IsDown;
+                        } break;
+
+                        case VK_MEDIA_PLAY_PAUSE:
+                        {
+                            Win32Keyboard[KEY_MEDIA_PLAYPAUSE].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_LAUNCH_MAIL:
+                        {
+                            Win32Keyboard[KEY_LAUNCH_MAIL].WMDown = IsDown;
+                        } break;
+
+                        case VK_LAUNCH_MEDIA_SELECT:
+                        {
+                            Win32Keyboard[KEY_LAUNCH_MEDIASELECT].WMDown = IsDown;
+                        } break;
+
+                        case VK_LAUNCH_APP1:
+                        {
+                            Win32Keyboard[KEY_LAUNCH_APP1].WMDown = IsDown;
+                        } break;
+
+                        case VK_LAUNCH_APP2:
+                        {
+                            Win32Keyboard[KEY_LAUNCH_APP2].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_HELP:
+                        {
+                            Win32Keyboard[KEY_HELP].WMDown = IsDown;
+                        } break;
+
+                        case VK_MENU:
+                        {
+                            Win32Keyboard[KEY_MENU].WMDown = IsDown;
+                        } break;
+
+                        case VK_PRINT:
+                        {
+                            Win32Keyboard[KEY_PRINT].WMDown = IsDown;
+                        } break;
+
+                        case VK_SELECT:
+                        {
+                            Win32Keyboard[KEY_SELECT].WMDown = IsDown;
+                        } break;
+
+                        case VK_EXECUTE:
+                        {
+                            Win32Keyboard[KEY_EXEC].WMDown = IsDown;
+                        } break;
+
+                        case VK_APPS:
+                        {
+                            Win32Keyboard[KEY_APPLICATION].WMDown = IsDown;
+                        } break;
+
+                        case VK_SLEEP:
+                        {
+                            Win32Keyboard[KEY_SLEEP].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_KANA:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_MODE_KANA].WMDown = IsDown;
+                            Win32Keyboard[KEY_MODE_HANGEUL].WMDown = IsDown;
+                            Win32Keyboard[KEY_MODE_JUNJA].WMDown = IsDown;
+                        } break;
+
+                        case VK_JUNJA:
+                        {
+                            Win32Keyboard[KEY_MODE_JUNJA].WMDown = IsDown;
+                        } break;
+
+                        case VK_FINAL:
+                        {
+                            Win32Keyboard[KEY_MODE_FINAL].WMDown = IsDown;
+                        } break;
+
+                        case VK_KANJI:
+                        {
+                            // NOTE(hayden): Shared VKCode
+                            Win32Keyboard[KEY_MODE_HANJA].WMDown = IsDown;
+                            Win32Keyboard[KEY_MODE_KANJI].WMDown = IsDown;
+                        } break;
+
+                        ///
+
+                        case VK_ATTN:
+                        {
+                            Win32Keyboard[KEY_ATTN].WMDown = IsDown;
+                        } break;
+
+                        case VK_CRSEL:
+                        {
+                            Win32Keyboard[KEY_CRSEL].WMDown = IsDown;
+                        } break;
+
+                        case VK_EXSEL:
+                        {
+                            Win32Keyboard[KEY_EXSEL].WMDown = IsDown;
+                        } break;
+
+                        case VK_EREOF:
+                        {
+                            Win32Keyboard[KEY_EREOF].WMDown = IsDown;
+                        } break;
+
+                        case VK_PLAY:
+                        {
+                            Win32Keyboard[KEY_PLAY].WMDown = IsDown;
+                        } break;
+
+                        case VK_ZOOM:
+                        {
+                            Win32Keyboard[KEY_ZOOM].WMDown = IsDown;
+                        } break;
+
+                        case VK_NONAME:
+                        {
+                            Win32Keyboard[KEY_NONAME].WMDown = IsDown;
+                        } break;
+
+                        case VK_PA1:
+                        {
+                            Win32Keyboard[KEY_PA1].WMDown = IsDown;
+                        } break;
+                    }
+
+                    // getting a human-readable string
+                    //UINT Key = (ScanCode << 16) | (IsE0 << 24);
+                    //char Buffer[512] = {0};
+                    //GetKeyNameTextW((LONG)Key, Buffer, 512);
+                }
+            }
+        } break;
+
+        case WM_MOUSEMOVE:
+        {
+            // Cursor
+            Win32Mouse.X = LParam & 0xFFFF;
+            Win32Mouse.Y = (LParam >> 16) & 0xFFFF;
+
+            // Normalized
+            RECT ClientRect;
+            GetClientRect(Window, &ClientRect);
+            Win32Mouse.NormX = (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
+            Win32Mouse.NormY = (f32)Win32Mouse.Y / (f32)(ClientRect.bottom-1);
+        } break;
+
         default:
         {
             Result = DefWindowProcW(Window, Message, WParam, LParam);
@@ -171,6 +1212,19 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
     return(Result);
 }
+
+static void
+Win32ProcessDigitalButton(win32_digital_button *Button)
+{
+    // TODO(hayden): Avoid wrapping Up/Down?
+    b32 IsDown = Button->WMDown;
+    Button->Down = IsDown ? ++Button->Down : false;
+    Button->Up = !IsDown ? ++Button->Up : false;
+    Button->Pressed = (Button->Down == 1);
+    Button->Released = (Button->Up == 1);
+}
+
+#define NUM_RAW_INPUT_DEVICES 3 // NOTE(hayden): Keyboard, Mouse, & Gamepad
 
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
@@ -188,46 +1242,90 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);  // NOTE(zak): At somepoint the window name should reflect the applications name
         if(Window != INVALID_HANDLE_VALUE)
         {
-            if(Win32InitD3D11(Window))
+            // Input
+            RAWINPUTDEVICE RawInputDevices[NUM_RAW_INPUT_DEVICES];
+            { 
+                // Mouse
+                RawInputDevices[0].usUsagePage = 0x01;
+                RawInputDevices[0].usUsage = 0x02;
+                RawInputDevices[0].dwFlags = 0;
+                RawInputDevices[0].hwndTarget = Window;
+
+                // Keyboard
+                RawInputDevices[1].usUsagePage = 0x01;
+                RawInputDevices[1].usUsage = 0x06;
+                RawInputDevices[1].dwFlags = 0;
+                RawInputDevices[1].hwndTarget = Window;
+
+                // Gamepad
+                RawInputDevices[2].usUsagePage = 0x01;
+                RawInputDevices[2].usUsage = 0x05;
+                RawInputDevices[2].dwFlags = 0;
+                RawInputDevices[2].hwndTarget = Window;
+            }
+
+            if(RegisterRawInputDevices(RawInputDevices, NUM_RAW_INPUT_DEVICES, sizeof(RAWINPUTDEVICE)))
             {
-                if(ShowWindow(Window, SW_SHOW) == 0)
+                if(Win32InitD3D11(Window))
                 {
-                    IsRunning = true;
-
-                    while(IsRunning)
+                    if(ShowWindow(Window, SW_SHOW) == 0)
                     {
-                        MSG Message;
-                        while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
+                        IsRunning = true;
+
+                        while(IsRunning)
                         {
-                            TranslateMessage(&Message);
-                            DispatchMessageW(&Message);
+                            MSG Message;
+                            while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
+                            {
+                                TranslateMessage(&Message);
+                                DispatchMessageW(&Message);
+                            }
+
+                            { // Update Input
+                                // Mouse
+                                Win32ProcessDigitalButton(&Win32Mouse.Left);
+                                Win32ProcessDigitalButton(&Win32Mouse.Middle);
+                                Win32ProcessDigitalButton(&Win32Mouse.Right);
+                                Win32ProcessDigitalButton(&Win32Mouse.Extra1);
+                                Win32ProcessDigitalButton(&Win32Mouse.Extra2);
+
+                                // Keyboard
+                                for(int KeyIndex = 0; KeyIndex < (sizeof(Win32Keyboard) / sizeof(Win32Keyboard[0])) ; ++KeyIndex)
+                                {
+                                    Win32ProcessDigitalButton(&Win32Keyboard[KeyIndex]);
+                                }
+                            }
+
+                            // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
+                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+
+                            float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+                            DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
+                            
+                            // Update App
+                            // Render App
+
+                            Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }
-
-                        // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
-                        DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
-
-                        float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
-                        DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-                        
-                        // Update App
-                        // Render App
-
-                        Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                     }
+                    else
+                    {
+                        // TODO(zak): Logging
+                    }
+
+                    RenderTargetView->lpVtbl->Release(RenderTargetView);               
+                    Swapchain->lpVtbl->Release(Swapchain);
+                    DeviceContext->lpVtbl->Release(DeviceContext);
+                    Device->lpVtbl->Release(Device);
                 }
                 else
                 {
-                    // TODO(zak): Logging
+                    // TODO(zak): Loggings
                 }
-
-                RenderTargetView->lpVtbl->Release(RenderTargetView);               
-                Swapchain->lpVtbl->Release(Swapchain);
-                DeviceContext->lpVtbl->Release(DeviceContext);
-                Device->lpVtbl->Release(Device);
             }
             else
             {
-                // TODO(zak): Loggings
+                // TODO(hayden): Logging
             }
         }
         else
