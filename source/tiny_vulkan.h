@@ -177,12 +177,17 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 
 
 #define VK_NO_PROTOTYPES
+#ifndef STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_IMPLEMENTATION
+#endif
+
 #include "vulkan_core.h"
+#include "log.h"
 #include "tinyengine_types.h"
+
 
 /*
 This file will contain platform intedependent vulkan code
-vft struct means vulkan function table
 */
 
 PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
@@ -338,8 +343,6 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
 #define DEVICE_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
 #define DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
-
-
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
@@ -359,10 +362,10 @@ TODO(Kyryl): replace printf with our cutom prints
     	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
     	if(name == NULL)							\
       	{									\
-		printf("Could not load global Vulkan function: %s\n", #name);	\
+		Fatal("Could not load global Vulkan function: %s", #name);	\
 		return false;							\
       	}else								\
-      	{printf("Loaded global Vulkan function: %s\n", #name);}	\
+      	{Info("Loaded global Vulkan function: %s", #name);}	\
 
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
@@ -374,10 +377,10 @@ TODO(Kyryl): replace printf with our cutom prints
     	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
     	if(name == NULL)							\
       	{									\
-		printf("Could not load instance Vulkan function: %s\n", #name);	\
+		Fatal("Could not load instance Vulkan function: %s", #name);	\
 		return false;							\
       	}else								\
-      	{printf("Loaded instance Vulkan function: %s\n", #name);}	\
+      	{Info("Loaded instance Vulkan function: %s", #name);}	\
 
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"

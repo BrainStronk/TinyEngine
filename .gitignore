@@ -5,3 +5,5 @@ build/
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
+/source/tags
+
