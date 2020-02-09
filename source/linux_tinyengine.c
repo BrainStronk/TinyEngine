@@ -32,6 +32,8 @@ static linux_wnd Wnd;
 int main(int argc, char** argv)
 {
 	log_set_level(0);
+	FILE* f = fopen("./log.txt","w");
+	log_set_fp(f);
 
 	Wnd.Display = XOpenDisplay(getenv("DISPLAY"));
 	if (Wnd.Display == NULL)

@@ -112,6 +112,13 @@ void log_set_quiet(int enable)
 	L.quiet = enable ? 1 : 0;
 }
 
+void FormatString(char* Buf, char* Str, ...)
+{
+	va_list Args;
+	va_start(Args, Str);
+	stbsp_vsprintf(Buf, Str, Args);
+	va_end(Args);
+}
 
 void log_log(int level, const char *file, int line, const char *fmt, ...)
 {
@@ -136,11 +143,12 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 		char buf[16];
 		buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
 #ifdef LOG_USE_COLOR
-		fprintf(
-		    stderr, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+		FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
 		    buf, level_colors[level], level_names[level], file, line);
+		fputs(buf, stderr);
 #else
-		fprintf(stderr, "%s %-5s %s:%d: ", buf, level_names[level], file, line);
+		FormatString(buf, "%s %-5s %s:%d ", buf, level_names[level], file, line);
+		fputs(buf, stderr);
 #endif
 		va_start(args, fmt);
 		stbsp_vsprintf(Buffer, fmt, args);
@@ -149,17 +157,18 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 	}
 
 	/* Log to file */
-	//TODO(Kyryl): implement this with stb formatter.
 	if (L.fp)
 	{
 		va_list args;
 		char buf[32];
 		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
-		fprintf(L.fp, "%s %-5s %s:%d: ", buf, level_names[level], file, line);
+		FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[level], file, line);
+		fputs(buf, L.fp);
 		va_start(args, fmt);
-		vfprintf(L.fp, fmt, args);
+		stbsp_vsprintf(Buffer, fmt, args);
+		strcat(Buffer, "\n");
+		fputs(Buffer, L.fp);
 		va_end(args);
-		fprintf(L.fp, "\n");
 		fflush(L.fp);
 	}
 
