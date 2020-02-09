@@ -1044,18 +1044,18 @@ Win32ProcessDigitalButton(win32_digital_button *Button)
 
 // TODO(hayden): Split into multiple functions?
 static void
-Win32UpdateInput(win32_mouse *Win32Mouse, win32_digital_button *Win32Keyboard)
+Win32UpdateInput(win32_mouse *Mouse, win32_digital_button *Keyboard)
 {
-    Win32ProcessDigitalButton(&Win32Mouse->Left);
-    Win32ProcessDigitalButton(&Win32Mouse->Middle);
-    Win32ProcessDigitalButton(&Win32Mouse->Right);
-    Win32ProcessDigitalButton(&Win32Mouse->Extra1);
-    Win32ProcessDigitalButton(&Win32Mouse->Extra2);
+    Win32ProcessDigitalButton(&Mouse->Left);
+    Win32ProcessDigitalButton(&Mouse->Middle);
+    Win32ProcessDigitalButton(&Mouse->Right);
+    Win32ProcessDigitalButton(&Mouse->Extra1);
+    Win32ProcessDigitalButton(&Mouse->Extra2);
 
     // Keyboard
-    for(int KeyIndex = 0; KeyIndex < ArrayCount(Win32Keyboard); ++KeyIndex)
+    for(int KeyIndex = 0; KeyIndex < ArrayCount(Keyboard); ++KeyIndex)
     {
-        Win32ProcessDigitalButton(&Win32Keyboard[KeyIndex]);
+        Win32ProcessDigitalButton(&Keyboard[KeyIndex]);
     }
 }
 
