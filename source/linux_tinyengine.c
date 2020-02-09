@@ -1,4 +1,5 @@
 #define LINUX_LEAN_AND_MEAN
+#define VK_USE_PLATFORM_XLIB_KHR
 
 #include <X11/Xlib.h>
 #include <stdio.h>
@@ -6,6 +7,7 @@
 #include <string.h>
 
 #include "tinyengine_types.h"
+#include "vulkan_core.h"
 
 /*
 To avoid naming conflicts and ability to create more than 1 window -
