@@ -1053,7 +1053,7 @@ Win32UpdateInput(win32_mouse *Win32Mouse, win32_digital_button *Win32Keyboard)
     Win32ProcessDigitalButton(&Win32Mouse->Extra2);
 
     // Keyboard
-    for(int KeyIndex = 0; KeyIndex < (sizeof(Win32Keyboard) / sizeof(Win32Keyboard[0])) ; ++KeyIndex)
+    for(int KeyIndex = 0; KeyIndex < ARRAYSIZE(Win32Keyboard) ; ++KeyIndex)
     {
         Win32ProcessDigitalButton(&Win32Keyboard[KeyIndex]);
     }
