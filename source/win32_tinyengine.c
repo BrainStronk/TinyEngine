@@ -85,14 +85,14 @@ Win32InitD3D11(HWND Window)
                     SwapchainDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // TODO(zak): On Win8/10 we should be using Flip model swapchains instead, these are not supported on Win7.
                     SwapchainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH allows us to switch between a Windows and Fullscreen modes. 
 
-                    if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, Device, &SwapchainDescription, &Swapchain) == 0)
+                    if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, (IUnknown*)Device, &SwapchainDescription, &Swapchain) == 0)
                     {
                         DXGIFactory->lpVtbl->Release(DXGIFactory);
 
                         ID3D11Texture2D *Backbuffer = 0;
-                        if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, &Backbuffer) == 0)
+                        if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void**)&Backbuffer) == 0)
                         {
-                            if(Device->lpVtbl->CreateRenderTargetView(Device, Backbuffer, 0, &RenderTargetView) == 0)
+                            if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource*)Backbuffer, 0, &RenderTargetView) == 0)
                             {
                                 Backbuffer->lpVtbl->Release(Backbuffer);
 
