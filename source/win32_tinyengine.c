@@ -5,6 +5,7 @@
 
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
+#include "tinyengine_debug_utilities.h" // TODO(hayden): For debugging purposes only, make sure to remove eventually
 
 typedef struct win32_digital_button
 {
@@ -196,7 +197,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_INPUT:
         {
             UINT SizeOfBuffer = sizeof(RAWINPUT);
-            char Data[SizeOfBuffer] = {0};
+            char Data[sizeof(RAWINPUT)] = {0};
             if(GetRawInputData((HRAWINPUT)LParam, RID_INPUT, Data, &SizeOfBuffer, sizeof(RAWINPUTHEADER)) <= SizeOfBuffer)
             {
                 RAWINPUT *RawInput = (RAWINPUT *)Data;
@@ -999,9 +1000,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
             // Normalized
             // TODO(hayden): Pull this out into the engine code!
+            // TODO(hayden): Also, this isn't "centered" (where it's (0,0) at the center of the screen)
             RECT ClientRect;
             GetClientRect(Window, &ClientRect);
-            Win32Mouse.NormX = (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
+            Win32Mouse.NormX =  (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
             Win32Mouse.NormY = (f32)Win32Mouse.Y / (f32)(ClientRect.bottom-1);
         } break;
 
@@ -1025,10 +1027,21 @@ Win32ProcessDigitalButton(win32_digital_button *Button)
     Button->Released = (Button->Up == 1);
 }
 
+// TODO(hayden): Split into multiple functions?
 static void
-Win32UpdateInput(win32_mouse )
+Win32UpdateInput(win32_mouse *Win32Mouse, win32_digital_button *Win32Keyboard)
 {
+    Win32ProcessDigitalButton(&Win32Mouse->Left);
+    Win32ProcessDigitalButton(&Win32Mouse->Middle);
+    Win32ProcessDigitalButton(&Win32Mouse->Right);
+    Win32ProcessDigitalButton(&Win32Mouse->Extra1);
+    Win32ProcessDigitalButton(&Win32Mouse->Extra2);
 
+    // Keyboard
+    for(int KeyIndex = 0; KeyIndex < (sizeof(Win32Keyboard) / sizeof(Win32Keyboard[0])) ; ++KeyIndex)
+    {
+        Win32ProcessDigitalButton(&Win32Keyboard[KeyIndex]);
+    }
 }
 
 int WINAPI
@@ -1080,22 +1093,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            { // Update Input
-                                // Mouse
-                                Win32ProcessDigitalButton(&Win32Mouse.Left);
-                                Win32ProcessDigitalButton(&Win32Mouse.Middle);
-                                Win32ProcessDigitalButton(&Win32Mouse.Right);
-                                Win32ProcessDigitalButton(&Win32Mouse.Extra1);
-                                Win32ProcessDigitalButton(&Win32Mouse.Extra2);
-
-                                // Keyboard
-                                for(int KeyIndex = 0; KeyIndex < (sizeof(Win32Keyboard) / sizeof(Win32Keyboard[0])) ; ++KeyIndex)
-                                {
-                                    Win32ProcessDigitalButton(&Win32Keyboard[KeyIndex]);
-                                }
-                            }
-
-                            Win32UpdateInput(&Win32Mouse, &Win32Keyboard);
+                            Win32UpdateInput(&Win32Mouse, Win32Keyboard);
 
                             // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
                             DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
