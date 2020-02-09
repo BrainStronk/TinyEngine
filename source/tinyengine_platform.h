@@ -1,6 +1,8 @@
-// NOTE(hayden): The order here matters for calculation from KEY_0 to KEY_DOWN
-typedef enum te_keys te_keys;
-enum te_keys
+#ifndef TINYENGINE_PLATFORM_H
+#define TINYENGINE_PLATFORM_H
+
+// NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
+typedef enum te_keys
 {
     KEY_0,
     KEY_1,
@@ -195,4 +197,6 @@ enum te_keys
     KEY_OEM_SPEC2,
     KEY_OEM_SPEC3,
     KEY_OEM_CLEAR,
-};
+} te_keys;
+
+#endif // TINYENGINE_PLATFORM_H
