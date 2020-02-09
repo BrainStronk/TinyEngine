@@ -3,9 +3,13 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
+#ifndef STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_IMPLEMENTATION
+#endif
+#include "stb_sprintf.h"
+
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
-#include "tinyengine_debug_utilities.h" // TODO(hayden): For debugging purposes only, make sure to remove eventually
 
 typedef struct win32_digital_button
 {
@@ -42,6 +46,17 @@ static ID3D11DeviceContext *DeviceContext;
 static IDXGISwapChain *Swapchain;
 static ID3D11RenderTargetView *RenderTargetView;
 static D3D_FEATURE_LEVEL ActiveFeatureLevel;
+
+static void
+Win32PrintDebugString(char* Format, ...)
+{
+    static char Buffer[1024];
+    va_list ArgumentList;
+    va_start(ArgumentList, Format);
+    stbsp_vsprintf(Buffer, Format, ArgumentList);
+    va_end(ArgumentList);
+    OutputDebugStringA(Buffer);
+}
 
 static b32 
 Win32InitD3D11(HWND Window)
@@ -1003,7 +1018,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             // TODO(hayden): Also, this isn't "centered" (where it's (0,0) at the center of the screen)
             RECT ClientRect;
             GetClientRect(Window, &ClientRect);
-            Win32Mouse.NormX =  (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
+            Win32Mouse.NormX = (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
             Win32Mouse.NormY = (f32)Win32Mouse.Y / (f32)(ClientRect.bottom-1);
         } break;
 
@@ -1111,6 +1126,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                     {
                         // TODO(zak): Logging
                     }
+
+                    Win32PrintDebugString("Test\n");
 
                     RenderTargetView->lpVtbl->Release(RenderTargetView);               
                     Swapchain->lpVtbl->Release(Swapchain);
