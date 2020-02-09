@@ -1,3 +1,5 @@
+#!/bin/bash 
+set -x
 
 function assertInstalled()
 {
@@ -29,5 +31,15 @@ fi
 
 assertInstalled $CC
 mkdir -p ../build
-$CC win32_tinyengine.c -luser32 -ld3d11 -ldxguid -o ../build/tinyengine.exe
 
+function cross()
+{
+	$CC win32_tinyengine.c -luser32 -ld3d11 -ldxguid -o ../build/tinyengine.exe
+}
+
+function linux()
+{
+	gcc -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm linux_tinyengine.c -o ../build/tinyengine.exe
+}
+
+"$@"
