@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dlfcn.h>
 
 #include "tinyengine_types.h"
-#include "vulkan_core.h"
+#include "tiny_vulkan.h"
 
 /*
 To avoid naming conflicts and ability to create more than 1 window -
@@ -54,9 +55,17 @@ int main(int argc, char** argv)
 		   Wnd.ValueMask, &Wnd.Attr);
 
 
+   void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW);
+   PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
+   if(!InitVulkan(VulkanLoader, &ProcAddr))
+   {
+      fprintf(stderr, "Failed to initialize vulkan runtime!\n");
+      exit(1);
+   }
+ 
+
    XSelectInput(Wnd.Display, Wnd.Window, ExposureMask | KeyPressMask);
    XMapWindow(Wnd.Display, Wnd.Window);
- 
    XEvent Event;
    while (1) 
    {
@@ -65,6 +74,7 @@ int main(int argc, char** argv)
 	   switch(Event.type)
 	   {
 		   case KeyPress:
+			   exit(0);
 			   break;
 		   case KeyRelease:
 			   break;

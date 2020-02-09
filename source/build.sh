@@ -39,7 +39,7 @@ function cross()
 
 function linux()
 {
-	gcc -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm linux_tinyengine.c -o ../build/tinyengine.exe
+	gcc -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
 }
 
 "$@"
