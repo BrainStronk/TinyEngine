@@ -343,12 +343,13 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 
 const char* GetVulkanResultString(VkResult result);
 
+//TODO(Kyryl): using printf because it does not append "\n" automatically. make same one in log.h
 #ifdef TINYENGINE_DEBUG
 #   define ASSERT(condition, message, ...) \
 	do { \
 		if (! (condition)) \
 		{ \
-			Fatal("%s", ##__VA_ARGS__);\
+			Fatal(message, ##__VA_ARGS__);\
 			FILE *File = fopen(__FILE__, "r");\
 			if(File)\
 			{\
@@ -357,8 +358,8 @@ const char* GetVulkanResultString(VkResult result);
 				while(fgets(line, 1024, File)) \
 				{\
 					count++;\
-					if(count == __LINE__)\
-					{ Fatal("On: %s", &line[0]);}\
+					if(count >= (__LINE__ - 5) && count <= (__LINE__ + 5))\
+					{ printf("%d %s", count, &line[0]);}\
 				}\
 			}\
 			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
@@ -480,7 +481,8 @@ b32 InitVulkan(void* LibHandle, PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqE
 			{
 				Debug("%s", (char*)&InstanceExtensions[i]);
 			}
-			ASSERT(0, "Extension %s  is not supported!", RequiredExtensions[i]);
+			ASSERT(0, "Extension %s  is not supported!", RequiredExtensions[c]);
+			return false;
 		}
 _continue:;
 	}
