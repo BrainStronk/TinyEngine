@@ -8,6 +8,9 @@
 #include <time.h>
 #include "stb_sprintf.h"
 
+b32 LogNewLine = true;
+b32 LogExtra = true;
+
 typedef void (*log_LockFn)(void *udata, int lock);
 
 enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL, T_LOG };
@@ -140,19 +143,30 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 	if (!L.quiet)
 	{
 		va_list args;
-		char buf[16];
-		buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
+		if(LogExtra)
+		{
+			char buf[16];
+			buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
 #ifdef LOG_USE_COLOR
-		FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
-		    buf, level_colors[level], level_names[level], file, line);
-		fputs(buf, stderr);
+			FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+					buf, level_colors[level], level_names[level], file, line);
+			fputs(buf, stderr);
 #else
-		FormatString(buf, "%s %-5s %s:%d ", buf, level_names[level], file, line);
-		fputs(buf, stderr);
+			FormatString(buf, "%s %-5s %s:%d ", buf, level_names[level], file, line);
+			fputs(buf, stderr);
 #endif
+		}
 		va_start(args, fmt);
 		stbsp_vsprintf(Buffer, fmt, args);
-		puts(Buffer);
+		//Appends "\n". For special case use. Treat with care.
+		if(LogNewLine)
+		{
+			puts(Buffer);
+		}
+		else
+		{
+			fputs(Buffer, stderr);
+		}
 		va_end(args);
 	}
 
@@ -160,10 +174,13 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 	if (L.fp)
 	{
 		va_list args;
-		char buf[32];
-		buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
-		FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[level], file, line);
-		fputs(buf, L.fp);
+		if(LogExtra)
+		{
+			char buf[32];
+			buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+			FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[level], file, line);
+			fputs(buf, L.fp);
+		}
 		va_start(args, fmt);
 		stbsp_vsprintf(Buffer, fmt, args);
 		strcat(Buffer, "\n");

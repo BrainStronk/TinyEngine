@@ -343,7 +343,6 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 
 const char* GetVulkanResultString(VkResult result);
 
-//TODO(Kyryl): using printf because it does not append "\n" automatically. make same one in log.h
 #ifdef TINYENGINE_DEBUG
 #   define ASSERT(condition, message, ...) \
 	do { \
@@ -355,13 +354,17 @@ const char* GetVulkanResultString(VkResult result);
 			{\
 				int count = 0;\
 				char line[1024];\
+				LogNewLine = false;\
+				LogExtra = false;\
 				while(fgets(line, 1024, File)) \
 				{\
 					count++;\
 					if(count >= (__LINE__ - 5) && count <= (__LINE__ + 5))\
-					{ printf("%d %s", count, &line[0]);}\
+					{ Trace("%d %s", count, &line[0]);}\
 				}\
 			}\
+			LogExtra = true;\
+			LogNewLine = true;\
 			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
 			char Buf[10];					\
 			fgets(Buf, 10, stdin); \
@@ -518,8 +521,6 @@ _continue:;
 		//allocators->pfnInternalFree = nullptr;
 	}
 	VK_CHECK(vkCreateInstance(&instance_create_info, allocators, &instance));
-
-//(Kyryl): this is will work yet. create software instance first.
 
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION( name )				\
     	name = (PFN_##name) (vkGetInstanceProcAddr(instance, #name));	\
