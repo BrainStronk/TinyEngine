@@ -60,9 +60,18 @@ int main(int argc, char** argv)
 			Wnd.ValueMask, &Wnd.Attr);
 
 
+	static const char *extensions[] =
+	{
+		VK_KHR_SURFACE_EXTENSION_NAME,
+		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#ifdef TINYENGINE_DEBUG
+		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
+#endif
+	};
+
 	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW);
 	PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
-	if(!InitVulkan(VulkanLoader, &ProcAddr))
+	if(!InitVulkan(VulkanLoader, &ProcAddr, ArrayCount(extensions), extensions))
 	{
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);

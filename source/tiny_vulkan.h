@@ -175,12 +175,7 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 #ifndef TINY_VULKAN_H
 #define TINY_VULKAN_H
 
-
 #define VK_NO_PROTOTYPES
-#ifndef STB_SPRINTF_IMPLEMENTATION
-#define STB_SPRINTF_IMPLEMENTATION
-#endif
-
 #include "vulkan_core.h"
 #include "log.h"
 #include "tinyengine_types.h"
@@ -346,17 +341,109 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
-b32 InitVulkan(void* LibHandle, PFN_vkGetInstanceProcAddr* GetProcAddr)
+const char* GetVulkanResultString(VkResult result);
+
+#ifdef TINYENGINE_DEBUG
+#   define ASSERT(condition, message, ...) \
+	do { \
+		if (! (condition)) \
+		{ \
+			Fatal("%s", ##__VA_ARGS__);\
+			FILE *File = fopen(__FILE__, "r");\
+			if(File)\
+			{\
+				int count = 0;\
+				char line[1024];\
+				while(fgets(line, 1024, File)) \
+				{\
+					count++;\
+					if(count == __LINE__)\
+					{ Fatal("On: %s", &line[0]);}\
+				}\
+			}\
+			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
+			char Buf[10];					\
+			fgets(Buf, 10, stdin); \
+			exit(1); \
+		} \
+	} while (false)
+
+#define VK_CHECK(call)\
+	do {\
+		ASSERT(call == VK_SUCCESS,"VK_CHECK: %s", GetVulkanResultString(call));\
+	} while (false)
+
+#else
+#define ASSERT(condition, message, ...)
+#define VK_CHECK(call)
+#endif
+
+VkAllocationCallbacks allocator;
+VkAllocationCallbacks* allocators = NULL;//&allocator;
+VkInstance instance;
+
+const char* GetVulkanResultString(VkResult result)
+{
+	switch (result)
+	{
+	case VK_SUCCESS:
+		return "Success";
+	case VK_NOT_READY:
+		return "A fence or query has not yet completed";
+	case VK_TIMEOUT:
+		return "A wait operation has not completed in the specified time";
+	case VK_EVENT_SET:
+		return "An event is signaled";
+	case VK_EVENT_RESET:
+		return "An event is unsignaled";
+	case VK_INCOMPLETE:
+		return "A return array was too small for the result";
+	case VK_ERROR_OUT_OF_HOST_MEMORY:
+		return "A host memory allocation has failed";
+	case VK_ERROR_OUT_OF_DEVICE_MEMORY:
+		return "A device memory allocation has failed";
+	case VK_ERROR_INITIALIZATION_FAILED:
+		return "Initialization of an object could not be completed for implementation-specific reasons";
+	case VK_ERROR_DEVICE_LOST:
+		return "The logical or physical device has been lost";
+	case VK_ERROR_MEMORY_MAP_FAILED:
+		return "Mapping of a memory object has failed";
+	case VK_ERROR_LAYER_NOT_PRESENT:
+		return "A requested layer is not present or could not be loaded";
+	case VK_ERROR_EXTENSION_NOT_PRESENT:
+		return "A requested extension is not supported";
+	case VK_ERROR_FEATURE_NOT_PRESENT:
+		return "A requested feature is not supported";
+	case VK_ERROR_INCOMPATIBLE_DRIVER:
+		return "The requested version of Vulkan is not supported by the driver or is otherwise incompatible";
+	case VK_ERROR_TOO_MANY_OBJECTS:
+		return "Too many objects of the type have already been created";
+	case VK_ERROR_FORMAT_NOT_SUPPORTED:
+		return "A requested format is not supported on this device";
+	case VK_ERROR_SURFACE_LOST_KHR:
+		return "A surface is no longer available";
+	case VK_SUBOPTIMAL_KHR:
+		return "A swapchain no longer matches the surface properties exactly, but can still be used";
+	case VK_ERROR_OUT_OF_DATE_KHR:
+		return "A surface has changed in such a way that it is no longer compatible with the swapchain";
+	case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+		return "The display used by a swapchain does not use the same presentable image layout";
+	case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+		return "The requested window is already connected to a VkSurfaceKHR, or to some other non-Vulkan API";
+	case VK_ERROR_VALIDATION_FAILED_EXT:
+		return "A validation layer found an error";
+	default:
+		return "ERROR: UNKNOWN VULKAN ERROR";
+	}
+}
+
+b32 InitVulkan(void* LibHandle, PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions)
 {
 	if(!LibHandle || !GetProcAddr)
 	{
 		return false;
 	}
 	vkGetInstanceProcAddr = *GetProcAddr;
-
-/*
-TODO(Kyryl): replace printf with our cutom prints
-*/
 
 	#define GLOBAL_LEVEL_VULKAN_FUNCTION( name )				\
     	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
@@ -370,11 +457,70 @@ TODO(Kyryl): replace printf with our cutom prints
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
 
+	u32 ExtensionCount;
+	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &ExtensionCount, NULL));
+	VkExtensionProperties InstanceExtensions[ExtensionCount];
+	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &ExtensionCount, &InstanceExtensions[0]));
+
+	for(u32 c = 0; c < ReqExCount; c++)
+	{
+		if(RequiredExtensions[c] != NULL)
+		{
+			u32 i;
+			for(i = 0; i<ExtensionCount; i++)
+			{
+				if(strstr((char*)&InstanceExtensions[i], RequiredExtensions[c]))
+				{
+					Info("Using instance extension: %s ", RequiredExtensions[c]);
+					goto _continue;
+				}
+			}
+			Debug("Available Extensions: ");
+			for(i = 0; i<ExtensionCount; i++)
+			{
+				Debug("%s", (char*)&InstanceExtensions[i]);
+			}
+			ASSERT(0, "Extension %s  is not supported!", RequiredExtensions[i]);
+		}
+_continue:;
+	}
+
+	VkApplicationInfo app_info =
+	{
+		VK_STRUCTURE_TYPE_APPLICATION_INFO,
+		NULL,
+		"TinyEngine",
+		VK_MAKE_VERSION(1,0,0),
+		"TinyEngine",
+		VK_MAKE_VERSION(1,0,0),
+		VK_MAKE_VERSION(1,0,0)
+	};
+
+	VkInstanceCreateInfo instance_create_info;
+	memset(&instance_create_info, 0, sizeof(instance_create_info));
+	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	instance_create_info.pApplicationInfo = &app_info;
+	instance_create_info.enabledExtensionCount = ReqExCount;
+	instance_create_info.ppEnabledExtensionNames = &RequiredExtensions[0];
+
+
+	//define custom vulkan allocators
+	//allocators = nullptr;
+	if(allocators)
+	{
+		//allocators->pUserData = nullptr;
+		//allocators->pfnAllocation =
+		//allocators->pfnReallocation =
+		//allocators->pfnFree =
+		//allocators->pfnInternalAllocation = nullptr;
+		//allocators->pfnInternalFree = nullptr;
+	}
+	VK_CHECK(vkCreateInstance(&instance_create_info, allocators, &instance));
 
 //(Kyryl): this is will work yet. create software instance first.
 
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION( name )				\
-    	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
+    	name = (PFN_##name) (vkGetInstanceProcAddr(instance, #name));	\
     	if(name == NULL)							\
       	{									\
 		Fatal("Could not load instance Vulkan function: %s", #name);	\
@@ -382,6 +528,20 @@ TODO(Kyryl): replace printf with our cutom prints
       	}else								\
       	{Info("Loaded instance Vulkan function: %s", #name);}	\
 
+	#define TINY_VULKAN_UPDATE
+	#include "tiny_vulkan.h"
+
+#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
+	for(uint32_t i = 0; i<ReqExCount; i++) {				\
+		if( strstr(RequiredExtensions[i], extension) ) { \
+			name = (PFN_##name)vkGetInstanceProcAddr( instance, #name );	\
+			if( name == NULL ){						\
+				Warn("Could not load instance-level Vulkan function named: %s", #name);  \
+				return false;                                                        \
+			}else                                                                       \
+			{Info("Loaded function from extension: %s", #name);}		\
+		}\
+}  
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
 

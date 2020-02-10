@@ -6,4 +6,4 @@ build/
 !.vscode/extensions.json
 *.code-workspace
 /source/tags
-
+/source/log.txt
