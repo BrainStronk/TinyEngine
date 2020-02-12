@@ -11,34 +11,7 @@
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
-typedef struct win32_digital_button
-{
-    u32 Up;
-    u32 Down;
-    b32 Pressed;
-    b32 Released;
-
-    b32 WMDown;
-} win32_digital_button;
-
-typedef struct win32_mouse
-{
-    win32_digital_button Left;
-    win32_digital_button Middle;
-    win32_digital_button Right;
-    win32_digital_button Extra1;
-    win32_digital_button Extra2;
-    s16 WheelDelta;
-    s32 X; // TODO(hayden): Vector, or leave as is?
-    s32 Y; // TODO(hayden): Vector, or leave as is?
-    f32 NormX; // TODO(hayden): Is this the normalization Kyryl was requesting?
-    f32 NormY;
-} win32_mouse;
-
 #define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad
-
-static win32_mouse Win32Mouse;
-static win32_digital_button Win32Keyboard[0xFE];
 
 static b32 IsRunning;
 static ID3D11Device *Device;
@@ -46,6 +19,19 @@ static ID3D11DeviceContext *DeviceContext;
 static IDXGISwapChain *Swapchain;
 static ID3D11RenderTargetView *RenderTargetView;
 static D3D_FEATURE_LEVEL ActiveFeatureLevel;
+
+static te_event Global_EventQueue[512];
+static int Global_EventQueueIndex;
+
+// TODO(hayden): Better name for this?
+static void
+PushInputEvent(te_event Event)
+{
+    Global_EventQueue[Global_EventQueueIndex] = Event;
+    ++Global_EventQueueIndex;
+}
+
+////////////////////////////////////
 
 static void
 Win32PrintDebugString(char* Format, ...)
@@ -220,48 +206,64 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                 if(RawInput->header.dwType == RIM_TYPEMOUSE)
                 {
                     // Mouse Buttons & Wheel
+                    te_event Event = {0};
+                    Event.Mouse.Type = TE_EVENT_MOUSE_CLICK;
+                    Event.Mouse.Button = TE_EVENT_NO_INPUT;
+                    Event.Mouse.IsDown = TE_EVENT_NO_INPUT;
+
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
                     {
                         case RI_MOUSE_LEFT_BUTTON_UP:
                         case RI_MOUSE_LEFT_BUTTON_DOWN:
                         {
-                            Win32Mouse.Left.WMDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
+                            Event.Mouse.Button = MOUSE_LEFT;
+                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_MIDDLE_BUTTON_UP:
                         case RI_MOUSE_MIDDLE_BUTTON_DOWN:
                         {
-                            Win32Mouse.Middle.WMDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                            Event.Mouse.Button = MOUSE_MIDDLE;
+                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_RIGHT_BUTTON_UP:
                         case RI_MOUSE_RIGHT_BUTTON_DOWN:
                         {
-                            Win32Mouse.Right.WMDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
+                            Event.Mouse.Button = MOUSE_RIGHT;
+                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_BUTTON_4_UP:
                         case RI_MOUSE_BUTTON_4_DOWN:
                         {
-                            Win32Mouse.Extra1.WMDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
+                            Event.Mouse.Button = MOUSE_EXTRA1;
+                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
                         } break;
 
                         case RI_MOUSE_BUTTON_5_UP:
                         case RI_MOUSE_BUTTON_5_DOWN:
                         {
-                            Win32Mouse.Extra2.WMDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
+                            Event.Mouse.Button = MOUSE_EXTRA2;
+                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
                         } break;
 
                         case RI_MOUSE_WHEEL:
                         {
-                            Win32Mouse.WheelDelta = RawInput->data.mouse.usButtonData;
+                            Event.Mouse.WheelDelta = RawInput->data.mouse.usButtonData;
                         } break;
 
                         default:
                         {
-                            // TODO(hayden): Does anything else need to be handled
+                            // TODO(hayden): Does anything else need to be handled?
                         }
+                    }
+
+                    // TODO(hayden): Assert this?
+                    if(Event.Mouse.Button != TE_EVENT_NO_INPUT) // Don't push events we aren't choosing to handle
+                    {
+                        PushInputEvent(Event);
                     }
                 }
                 else if(RawInput->header.dwType == RIM_TYPEKEYBOARD)
@@ -431,572 +433,482 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             } break;
                         }
 
-                        b32 IsUp = (Flags & RI_KEY_BREAK);
-                        b32 IsDown = !IsUp;
-                        u32 CurrentKey = 0;
+                        // b32 IsUp = (Flags & RI_KEY_BREAK); 
+                        b32 IsDown = (!Flags || !RI_KEY_BREAK); // TODO(hayden): This is the logical negation of "IsUp", right?
 
-                        // Assign VirtualKey to Engine's te_key enum
-                        switch(VirtualKey)
+                        te_event Event = {0};
+                        Event.Type = TE_EVENT_TYPE_KEYBOARD;
+                        Event.Keyboard.IsDown = IsDown;
+                        Event.Keyboard.KeyType = TE_EVENT_NO_INPUT;
+
+                        // Assign VirtualKey to Engine's te_key_type enum
+                        if((VirtualKey >= '0') && (VirtualKey <= '9'))
                         {
-                            case 0x30:
-                            case 0x31:
-                            case 0x32:
-                            case 0x33:
-                            case 0x34:
-                            case 0x35:
-                            case 0x36:
-                            case 0x37:
-                            case 0x38:
-                            case 0x39:
-                            { // Numbers 0-9
-                                for(int I = 0x30; I <= 0x39; ++I)
+                            for(int VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
+                            {
+                                if(VKIndex == VirtualKey)
                                 {
-                                    if(I == VirtualKey)
-                                    {
-                                        Win32Keyboard[I - 0x30].WMDown = IsDown;
-                                    }
+                                    Event.Keyboard.KeyType = VKIndex - '0';
                                 }
-                            } break;
-                            
-                            ///
-
-                            case 0x41:
-                            case 0x42:
-                            case 0x43:
-                            case 0x44:
-                            case 0x45:
-                            case 0x46:
-                            case 0x47:
-                            case 0x48:
-                            case 0x49:
-                            case 0x4A:
-                            case 0x4B:
-                            case 0x4C:
-                            case 0x4D:
-                            case 0x4E:
-                            case 0x4F:
-                            case 0x50:
-                            case 0x51:
-                            case 0x52:
-                            case 0x53:
-                            case 0x54:
-                            case 0x55:
-                            case 0x56:
-                            case 0x57:
-                            case 0x58:
-                            case 0x59:
-                            case 0x5A:
-                            { // Letters A-Z
-                                int Offset = 10;
-                                for(int I = 0x41; I <= 0x5A; ++I)
-                                {
-                                    if(I == VirtualKey)
-                                    {
-                                        Win32Keyboard[I - (0x41-Offset)].WMDown = IsDown;
-                                    }
-                                }
-                            } break;
-
-                            ///
-
-                            case VK_NUMPAD0:
-                            case VK_NUMPAD1:
-                            case VK_NUMPAD2:
-                            case VK_NUMPAD3:
-                            case VK_NUMPAD4:
-                            case VK_NUMPAD5:
-                            case VK_NUMPAD6:
-                            case VK_NUMPAD7:
-                            case VK_NUMPAD8:
-                            case VK_NUMPAD9:
-                            case VK_MULTIPLY:
-                            case VK_ADD:
-                            case VK_SEPARATOR:
-                            case VK_SUBTRACT:
-                            case VK_DECIMAL:
-                            case VK_DIVIDE:
-                            {
-                                int Offset = 10 + 26;
-                                for(int I = VK_NUMPAD0; I <= VK_DIVIDE; ++I)
-                                {
-                                    Win32Keyboard[I - (VK_NUMPAD0-Offset)].WMDown = IsDown;
-                                }
-                            } break;
-
-                            ///
-
-                            case VK_F1:
-                            case VK_F2:
-                            case VK_F3:
-                            case VK_F4:
-                            case VK_F5:
-                            case VK_F6:
-                            case VK_F7:
-                            case VK_F8:
-                            case VK_F9:
-                            case VK_F10:
-                            case VK_F11:
-                            case VK_F12:
-                            case VK_F13:
-                            case VK_F14:
-                            case VK_F15:
-                            case VK_F16:
-                            case VK_F17:
-                            case VK_F18:
-                            case VK_F19:
-                            case VK_F20:
-                            case VK_F21:
-                            case VK_F22:
-                            case VK_F23:
-                            case VK_F24:
-                            {
-                                int Offset = 10 + 26 + 16;
-                                for(int I = VK_F1; I <= VK_F24; ++I)
-                                {
-                                    Win32Keyboard[I - (VK_F1-Offset)].WMDown = IsDown;
-                                }
-                            } break;
-
-                            ///
-
-                            case VK_LEFT:
-                            case VK_UP:
-                            case VK_RIGHT:
-                            case VK_DOWN:
-                            {
-                                int Offset = 10 + 26 + 16 + 24;
-                                for(int I = VK_LEFT; I <= VK_DOWN; ++I)
-                                {
-                                    Win32Keyboard[I - (VK_LEFT-Offset)].WMDown = IsDown;
-                                }
-                            } break;
-
-                            ///
-
-                            case VK_BACK:
-                            {
-                                Win32Keyboard[KEY_BACKSPACE].WMDown = IsDown;
-                            } break;
-
-                            case VK_TAB:
-                            {
-                                Win32Keyboard[KEY_TAB].WMDown = IsDown;
-                            } break;
-
-                            case VK_RETURN:
-                            {
-                                Win32Keyboard[KEY_RETURN].WMDown = IsDown;
-                            } break;
-
-                            case VK_LSHIFT:
-                            {
-                                Win32Keyboard[KEY_LSHIFT].WMDown = IsDown;
-                            } break;
-
-                            case VK_RSHIFT:
-                            {
-                                Win32Keyboard[KEY_RSHIFT].WMDown = IsDown;
-                            } break;
-
-                            case VK_LCONTROL:
-                            {
-                                Win32Keyboard[KEY_LCONTROL].WMDown = IsDown;
-                            } break;
-
-                            case VK_RCONTROL:
-                            {
-                                Win32Keyboard[KEY_RCONTROL].WMDown = IsDown;
-                            } break;
-
-                            case VK_CAPITAL:
-                            {
-                                Win32Keyboard[KEY_CAPSLOCK].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_SPACE:
-                            {
-                                Win32Keyboard[KEY_SPACE].WMDown = IsDown;
-                            } break;
-
-                            case VK_LWIN:
-                            {
-                                Win32Keyboard[KEY_LSUPER].WMDown = IsDown;
-                            } break;
-
-                            case VK_RWIN:
-                            {
-                                Win32Keyboard[KEY_RSUPER].WMDown = IsDown;
-                            } break;
-
-                            case VK_LMENU:
-                            {
-                                Win32Keyboard[KEY_LALT].WMDown = IsDown;
-                            } break;
-
-                            case VK_RMENU:
-                            {
-                                Win32Keyboard[KEY_RALT].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_ESCAPE:
-                            {
-                                Win32Keyboard[KEY_ESCAPE].WMDown = IsDown;
-                            } break;
-
-                            case VK_PRIOR:
-                            {
-                                Win32Keyboard[KEY_PAGEUP].WMDown = IsDown;
-                            } break;
-
-                            case VK_NEXT:
-                            {
-                                Win32Keyboard[KEY_PAGEDOWN].WMDown = IsDown;
-                            } break;
-
-                            case VK_HOME:
-                            {
-                                Win32Keyboard[KEY_HOME].WMDown = IsDown;
-                            } break;
-
-                            case VK_END:
-                            {
-                                Win32Keyboard[KEY_END].WMDown = IsDown;
-                            } break;
-
-                            case VK_INSERT:
-                            {
-                                Win32Keyboard[KEY_INSERT].WMDown = IsDown;
-                            } break;
-
-                            case VK_DELETE:
-                            {
-                                Win32Keyboard[KEY_DELETE].WMDown = IsDown;
-                            } break;
-
-                            case VK_PAUSE:
-                            {
-                                Win32Keyboard[KEY_PAUSE].WMDown = IsDown;
-                            } break;
-
-                            case VK_NUMLOCK:
-                            {
-                                Win32Keyboard[KEY_NUMLOCK].WMDown = IsDown;
-                            } break;
-
-                            case VK_SCROLL: // TODO(hayden): Not being handled correctly!!!
-                            {
-                                Win32Keyboard[KEY_SCROLLLOCK].WMDown = IsDown;
-                            } break;
-
-                            case VK_SNAPSHOT:
-                            {
-                                Win32Keyboard[KEY_PRINTSCREEN].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_OEM_PLUS:
-                            {
-                                Win32Keyboard[KEY_PLUS].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_COMMA:
-                            {
-                                Win32Keyboard[KEY_COMMA].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_MINUS:
-                            {
-                                Win32Keyboard[KEY_MINUS].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_1:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_SEMICOLON].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_1].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_2:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_SLASH].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_2].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_3:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_GRAVE].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_3].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_4:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_LBRACKET].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_4].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_5:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_BACKSLASH].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_5].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_6:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_RBRACKET].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_6].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_7:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_QUOTE].WMDown = IsDown;
-                                Win32Keyboard[KEY_OEM_7].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_8:
-                            {
-                                Win32Keyboard[KEY_OEM_8].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_102:
-                            {
-                                Win32Keyboard[KEY_OEM_102].WMDown = IsDown;
-                            } break;
-
-                            case 0xE1: // OEM Specific
-                            {
-                                Win32Keyboard[KEY_OEM_SPEC1].WMDown = IsDown;
-                            } break;
-
-                            case 0xE3: // OEM Specific
-                            {
-                                Win32Keyboard[KEY_OEM_SPEC2].WMDown = IsDown;
-                            } break;
-
-                            case 0xE4: // OEM Specific
-                            {
-                                Win32Keyboard[KEY_OEM_SPEC3].WMDown = IsDown;
-                            } break;
-
-                            case VK_OEM_CLEAR:
-                            {
-                                Win32Keyboard[KEY_OEM_CLEAR].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_BROWSER_BACK:
-                            {
-                                Win32Keyboard[KEY_BROWSER_BACK].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_FORWARD:
-                            {
-                                Win32Keyboard[KEY_BROWSER_FORWARD].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_REFRESH:
-                            {
-                                Win32Keyboard[KEY_BROWSER_REFRESH].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_STOP:
-                            {
-                                Win32Keyboard[VK_BROWSER_STOP].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_SEARCH:
-                            {
-                                Win32Keyboard[KEY_BROWSER_SEARCH].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_FAVORITES:
-                            {
-                                Win32Keyboard[KEY_BROWSER_FAVORITES].WMDown = IsDown;
-                            } break;
-
-                            case VK_BROWSER_HOME:
-                            {
-                                Win32Keyboard[KEY_BROWSER_HOME].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_VOLUME_MUTE:
-                            {
-                                Win32Keyboard[KEY_VOLUME_MUTE].WMDown = IsDown;
-                            } break;
-
-                            case VK_VOLUME_UP:
-                            {
-                                Win32Keyboard[KEY_VOLUME_UP].WMDown = IsDown;
-                            } break;
-
-                            case VK_VOLUME_DOWN:
-                            {
-                                Win32Keyboard[KEY_VOLUME_DOWN].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_MEDIA_NEXT_TRACK:
-                            {
-                                Win32Keyboard[KEY_MEDIA_NEXT_TRACK].WMDown = IsDown;
-                            } break;
-
-                            case VK_MEDIA_PREV_TRACK:
-                            {
-                                Win32Keyboard[KEY_MEDIA_PREV_TRACK].WMDown = IsDown;
-                            } break;
-
-                            case VK_MEDIA_STOP:
-                            {
-                                Win32Keyboard[KEY_MEDIA_STOP].WMDown = IsDown;
-                            } break;
-
-                            case VK_MEDIA_PLAY_PAUSE:
-                            {
-                                Win32Keyboard[KEY_MEDIA_PLAYPAUSE].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_LAUNCH_MAIL:
-                            {
-                                Win32Keyboard[KEY_LAUNCH_MAIL].WMDown = IsDown;
-                            } break;
-
-                            case VK_LAUNCH_MEDIA_SELECT:
-                            {
-                                Win32Keyboard[KEY_LAUNCH_MEDIASELECT].WMDown = IsDown;
-                            } break;
-
-                            case VK_LAUNCH_APP1:
-                            {
-                                Win32Keyboard[KEY_LAUNCH_APP1].WMDown = IsDown;
-                            } break;
-
-                            case VK_LAUNCH_APP2:
-                            {
-                                Win32Keyboard[KEY_LAUNCH_APP2].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_HELP:
-                            {
-                                Win32Keyboard[KEY_HELP].WMDown = IsDown;
-                            } break;
-
-                            case VK_MENU:
-                            {
-                                Win32Keyboard[KEY_MENU].WMDown = IsDown;
-                            } break;
-
-                            case VK_PRINT:
-                            {
-                                Win32Keyboard[KEY_PRINT].WMDown = IsDown;
-                            } break;
-
-                            case VK_SELECT:
-                            {
-                                Win32Keyboard[KEY_SELECT].WMDown = IsDown;
-                            } break;
-
-                            case VK_EXECUTE:
-                            {
-                                Win32Keyboard[KEY_EXEC].WMDown = IsDown;
-                            } break;
-
-                            case VK_APPS:
-                            {
-                                Win32Keyboard[KEY_APPLICATION].WMDown = IsDown;
-                            } break;
-
-                            case VK_SLEEP:
-                            {
-                                Win32Keyboard[KEY_SLEEP].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_KANA:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_MODE_KANA].WMDown = IsDown;
-                                Win32Keyboard[KEY_MODE_HANGEUL].WMDown = IsDown;
-                                Win32Keyboard[KEY_MODE_JUNJA].WMDown = IsDown;
-                            } break;
-
-                            case VK_JUNJA:
-                            {
-                                Win32Keyboard[KEY_MODE_JUNJA].WMDown = IsDown;
-                            } break;
-
-                            case VK_FINAL:
-                            {
-                                Win32Keyboard[KEY_MODE_FINAL].WMDown = IsDown;
-                            } break;
-
-                            case VK_KANJI:
-                            {
-                                // NOTE(hayden): Shared VKCode
-                                Win32Keyboard[KEY_MODE_HANJA].WMDown = IsDown;
-                                Win32Keyboard[KEY_MODE_KANJI].WMDown = IsDown;
-                            } break;
-
-                            ///
-
-                            case VK_ATTN:
-                            {
-                                Win32Keyboard[KEY_ATTN].WMDown = IsDown;
-                            } break;
-
-                            case VK_CRSEL:
-                            {
-                                Win32Keyboard[KEY_CRSEL].WMDown = IsDown;
-                            } break;
-
-                            case VK_EXSEL:
-                            {
-                                Win32Keyboard[KEY_EXSEL].WMDown = IsDown;
-                            } break;
-
-                            case VK_EREOF:
-                            {
-                                Win32Keyboard[KEY_EREOF].WMDown = IsDown;
-                            } break;
-
-                            case VK_PLAY:
-                            {
-                                Win32Keyboard[KEY_PLAY].WMDown = IsDown;
-                            } break;
-
-                            case VK_ZOOM:
-                            {
-                                Win32Keyboard[KEY_ZOOM].WMDown = IsDown;
-                            } break;
-
-                            case VK_NONAME:
-                            {
-                                Win32Keyboard[KEY_NONAME].WMDown = IsDown;
-                            } break;
-
-                            case VK_PA1:
-                            {
-                                Win32Keyboard[KEY_PA1].WMDown = IsDown;
-                            } break;
+                            }
                         }
+                        else if((VirtualKey >= 'A') && (VirtualKey <= 'Z'))
+                        {
+                            int Offset = 10;
+                            for(int VKIndex = 0x41; VKIndex <= 0x5A; ++VKIndex)
+                            {
+                                if(VKIndex == VirtualKey)
+                                {
+                                    Event.Keyboard.KeyType = VKIndex - (0x41-Offset);
+                                }
+                            }
+                        }
+                        else if((VirtualKey >= VK_NUMPAD0) && (VirtualKey <= VK_DIVIDE))
+                        {
+                            int Offset = 10 + 26;
+                            for(int VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
+                            {
+                                Event.Keyboard.KeyType = VKIndex - (VK_NUMPAD0-Offset);
+                            }
+                        }
+                        else if((VirtualKey >= VK_F1) && (VirtualKey <= VK_F24))
+                        {
+                            int Offset = 10 + 26 + 16;
+                            for(int VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
+                            {
+                                Event.Keyboard.KeyType = VKIndex - (VK_F1-Offset);
+                            }
+                        }
+                        else if((VirtualKey >= VK_LEFT) && (VirtualKey <= VK_DOWN))
+                        {
+                            int Offset = 10 + 26 + 16 + 24;
+                            for(int VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
+                            {
+                                Event.Keyboard.KeyType = VKIndex - (VK_LEFT-Offset);
+                            }
+                        }
+                        else
+                        {
+                            switch(VirtualKey)
+                            {
+                                case VK_BACK:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BACKSPACE;
+                                } break;
+
+                                case VK_TAB:
+                                {
+                                    Event.Keyboard.KeyType = KEY_TAB;
+                                } break;
+
+                                case VK_RETURN:
+                                {
+                                    Event.Keyboard.KeyType = KEY_RETURN;
+                                } break;
+
+                                case VK_LSHIFT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LSHIFT;
+                                } break;
+
+                                case VK_RSHIFT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_RSHIFT;
+                                } break;
+
+                                case VK_LCONTROL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LCONTROL;
+                                } break;
+
+                                case VK_RCONTROL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_RCONTROL;
+                                } break;
+
+                                case VK_CAPITAL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_CAPSLOCK;
+                                } break;
+
+                                ///
+
+                                case VK_SPACE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_SPACE;
+                                } break;
+
+                                case VK_LWIN:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LSUPER;
+                                } break;
+
+                                case VK_RWIN:
+                                {
+                                    Event.Keyboard.KeyType = KEY_RSUPER;
+                                } break;
+
+                                case VK_LMENU:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LALT;
+                                } break;
+
+                                case VK_RMENU:
+                                {
+                                    Event.Keyboard.KeyType = KEY_RALT;
+                                } break;
+
+                                ///
+
+                                case VK_ESCAPE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_ESCAPE;
+                                } break;
+
+                                case VK_PRIOR:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PAGEUP;
+                                } break;
+
+                                case VK_NEXT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PAGEDOWN;
+                                } break;
+
+                                case VK_HOME:
+                                {
+                                    Event.Keyboard.KeyType = KEY_HOME;
+                                } break;
+
+                                case VK_END:
+                                {
+                                    Event.Keyboard.KeyType = KEY_END;
+                                } break;
+
+                                case VK_INSERT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_INSERT;
+                                } break;
+
+                                case VK_DELETE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_DELETE;
+                                } break;
+
+                                case VK_PAUSE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PAUSE;
+                                } break;
+
+                                case VK_NUMLOCK:
+                                {
+                                    Event.Keyboard.KeyType = KEY_NUMLOCK;
+                                } break;
+
+                                case VK_SCROLL: // TODO(hayden): Not being handled correctly!!!
+                                {
+                                    Event.Keyboard.KeyType = KEY_SCROLLLOCK;
+                                } break;
+
+                                case VK_SNAPSHOT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PRINTSCREEN;
+                                } break;
+
+                                ///
+
+                                case VK_OEM_PLUS:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PLUS;
+                                } break;
+
+                                case VK_OEM_COMMA:
+                                {
+                                    Event.Keyboard.KeyType = KEY_COMMA;
+                                } break;
+
+                                case VK_OEM_MINUS:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MINUS;
+                                } break;
+
+                                case VK_OEM_1:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_SEMICOLON;
+                                } break;
+
+                                case VK_OEM_2:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_SLASH;
+                                } break;
+
+                                case VK_OEM_3:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_GRAVE;
+                                } break;
+
+                                case VK_OEM_4:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_LBRACKET;
+                                } break;
+
+                                case VK_OEM_5:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_BACKSLASH;
+                                } break;
+
+                                case VK_OEM_6:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_RBRACKET;
+                                } break;
+
+                                case VK_OEM_7:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_QUOTE;
+                                } break;
+
+                                case VK_OEM_8:
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_8;
+                                } break;
+
+                                case VK_OEM_102:
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_102;
+                                } break;
+
+                                case 0xE1: // OEM Specific
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_SPECIFIC1;
+                                } break;
+
+                                case 0xE3: // OEM Specific
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_SPECIFIC2;
+                                } break;
+
+                                case 0xE4: // OEM Specific
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_SPECIFIC3;
+                                } break;
+
+                                case VK_OEM_CLEAR:
+                                {
+                                    Event.Keyboard.KeyType = KEY_OEM_CLEAR;
+                                } break;
+
+                                ///
+
+                                case VK_BROWSER_BACK:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_BACK;
+                                } break;
+
+                                case VK_BROWSER_FORWARD:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_FORWARD;
+                                } break;
+
+                                case VK_BROWSER_REFRESH:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_REFRESH;
+                                } break;
+
+                                case VK_BROWSER_STOP:
+                                {
+                                    Event.Keyboard.KeyType = VK_BROWSER_STOP;
+                                } break;
+
+                                case VK_BROWSER_SEARCH:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_SEARCH;
+                                } break;
+
+                                case VK_BROWSER_FAVORITES:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_FAVORITES;
+                                } break;
+
+                                case VK_BROWSER_HOME:
+                                {
+                                    Event.Keyboard.KeyType = KEY_BROWSER_HOME;
+                                } break;
+
+                                ///
+
+                                case VK_VOLUME_MUTE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_VOLUME_MUTE;
+                                } break;
+
+                                case VK_VOLUME_UP:
+                                {
+                                    Event.Keyboard.KeyType = KEY_VOLUME_UP;
+                                } break;
+
+                                case VK_VOLUME_DOWN:
+                                {
+                                    Event.Keyboard.KeyType = KEY_VOLUME_DOWN;
+                                } break;
+
+                                ///
+
+                                case VK_MEDIA_NEXT_TRACK:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MEDIA_NEXT_TRACK;
+                                } break;
+
+                                case VK_MEDIA_PREV_TRACK:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MEDIA_PREV_TRACK;
+                                } break;
+
+                                case VK_MEDIA_STOP:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MEDIA_STOP;
+                                } break;
+
+                                case VK_MEDIA_PLAY_PAUSE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MEDIA_PLAYPAUSE;
+                                } break;
+
+                                ///
+
+                                case VK_LAUNCH_MAIL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LAUNCH_MAIL;
+                                } break;
+
+                                case VK_LAUNCH_MEDIA_SELECT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LAUNCH_MEDIASELECT;
+                                } break;
+
+                                case VK_LAUNCH_APP1:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LAUNCH_APPLICATION1;
+                                } break;
+
+                                case VK_LAUNCH_APP2:
+                                {
+                                    Event.Keyboard.KeyType = KEY_LAUNCH_APPLICATION2;
+                                } break;
+
+                                ///
+
+                                case VK_HELP:
+                                {
+                                    Event.Keyboard.KeyType = KEY_HELP;
+                                } break;
+
+                                case VK_MENU:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MENU;
+                                } break;
+
+                                case VK_PRINT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PRINT;
+                                } break;
+
+                                case VK_SELECT:
+                                {
+                                    Event.Keyboard.KeyType = KEY_SELECT;
+                                } break;
+
+                                case VK_EXECUTE:
+                                {
+                                    Event.Keyboard.KeyType = KEY_EXEC;
+                                } break;
+
+                                case VK_APPS:
+                                {
+                                    Event.Keyboard.KeyType = KEY_APPLICATIONS;
+                                } break;
+
+                                case VK_SLEEP:
+                                {
+                                    Event.Keyboard.KeyType = KEY_SLEEP;
+                                } break;
+
+                                ///
+
+                                case VK_KANA:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_MODE_KANA;
+                                } break;
+
+                                case VK_JUNJA:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MODE_JUNJA;
+                                } break;
+
+                                case VK_FINAL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_MODE_FINAL;
+                                } break;
+
+                                case VK_KANJI:
+                                {
+                                    // NOTE(hayden): Shared VKCode
+                                    Event.Keyboard.KeyType = KEY_MODE_KANJI;
+                                } break;
+
+                                ///
+
+                                case VK_ATTN:
+                                {
+                                    Event.Keyboard.KeyType = KEY_ATTN;
+                                } break;
+
+                                case VK_CRSEL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_CRSEL;
+                                } break;
+
+                                case VK_EXSEL:
+                                {
+                                    Event.Keyboard.KeyType = KEY_EXSEL;
+                                } break;
+
+                                case VK_EREOF:
+                                {
+                                    Event.Keyboard.KeyType = KEY_EREOF;
+                                } break;
+
+                                case VK_PLAY:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PLAY;
+                                } break;
+
+                                case VK_ZOOM:
+                                {
+                                    Event.Keyboard.KeyType = KEY_ZOOM;
+
+                                } break;
+
+                                case VK_NONAME:
+                                {
+                                    Event.Keyboard.KeyType = KEY_NONAME;
+                                } break;
+
+                                case VK_PA1:
+                                {
+                                    Event.Keyboard.KeyType = KEY_PA1;
+                                } break;
+                            }
+                        }
+
+                        PushInputEvent(Event);
 
                         // getting a human-readable string
                         //UINT Key = (ScanCode << 16) | (IsE0 << 24);
@@ -1010,16 +922,21 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_MOUSEMOVE:
         {
             // Cursor
-            Win32Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
-            Win32Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
+            te_event Event = {0};
+            Event.Type = TE_EVENT_TYPE_MOUSE;
+            Event.Mouse.Type = TE_EVENT_MOUSE_MOVE;
+            Event.Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
+            Event.Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
 
             // Normalized
             // TODO(hayden): Pull this out into the engine code!
             // TODO(hayden): Also, this isn't "centered" (where it's (0,0) at the center of the screen)
             RECT ClientRect;
             GetClientRect(Window, &ClientRect);
-            Win32Mouse.NormX = (f32)Win32Mouse.X / (f32)(ClientRect.right-1);
-            Win32Mouse.NormY = (f32)Win32Mouse.Y / (f32)(ClientRect.bottom-1);
+            Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
+            Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
+
+            PushInputEvent(Event);
         } break;
 
         default:
@@ -1029,34 +946,6 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
     }
 
     return(Result);
-}
-
-static void
-Win32ProcessDigitalButton(win32_digital_button *Button)
-{
-    // TODO(hayden): Avoid wrapping Up/Down?
-    b32 IsDown = Button->WMDown;
-    Button->Down = IsDown ? ++Button->Down : false;
-    Button->Up = !IsDown ? ++Button->Up : false;
-    Button->Pressed = (Button->Down == 1);
-    Button->Released = (Button->Up == 1);
-}
-
-// TODO(hayden): Split into multiple functions?
-static void
-Win32UpdateInput(win32_mouse *Mouse, win32_digital_button *Keyboard)
-{
-    Win32ProcessDigitalButton(&Mouse->Left);
-    Win32ProcessDigitalButton(&Mouse->Middle);
-    Win32ProcessDigitalButton(&Mouse->Right);
-    Win32ProcessDigitalButton(&Mouse->Extra1);
-    Win32ProcessDigitalButton(&Mouse->Extra2);
-
-    // Keyboard
-    for(int KeyIndex = 0; KeyIndex < ArrayCount(Keyboard); ++KeyIndex)
-    {
-        Win32ProcessDigitalButton(&Keyboard[KeyIndex]);
-    }
 }
 
 int WINAPI
@@ -1098,7 +987,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                     if(ShowWindow(Window, SW_SHOW) == 0)
                     {
                         IsRunning = true;
-
                         while(IsRunning)
                         {
                             MSG Message;
@@ -1108,7 +996,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            Win32UpdateInput(&Win32Mouse, Win32Keyboard);
+                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes)
+                            for(int ClearIndex = 0; ClearIndex < Global_EventQueueIndex; ++ClearIndex)
+                            {
+                                te_event NoEvent = {0};
+                                Global_EventQueue[ClearIndex] = NoEvent;
+                            }
+                            Global_EventQueueIndex = 0;
 
                             // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
                             DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
@@ -1126,8 +1020,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                     {
                         // TODO(zak): Logging
                     }
-
-                    Win32PrintDebugString("Test\n");
 
                     RenderTargetView->lpVtbl->Release(RenderTargetView);               
                     Swapchain->lpVtbl->Release(Swapchain);

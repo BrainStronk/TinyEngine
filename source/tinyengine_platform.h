@@ -1,8 +1,24 @@
 #ifndef TINYENGINE_PLATFORM_H
 #define TINYENGINE_PLATFORM_H
 
+#define TE_EVENT_NO_INPUT -1
+typedef enum te_event_type
+{
+    TE_EVENT_TYPE_KEYBOARD,
+    TE_EVENT_TYPE_MOUSE,  
+} te_event_type;
+
+typedef enum te_event_mouse_button
+{
+    MOUSE_LEFT,
+    MOUSE_MIDDLE,
+    MOUSE_RIGHT,
+    MOUSE_EXTRA1,
+    MOUSE_EXTRA2,
+} te_event_mouse_button;
+
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
-typedef enum te_keys
+typedef enum te_event_key_type
 {
     KEY_0,
     KEY_1,
@@ -116,16 +132,29 @@ typedef enum te_keys
     KEY_PRINTSCREEN,
 
     // TODO(hayden): Non-US/manufacturer-specific handling
-    KEY_SEMICOLON,
     KEY_PLUS,
     KEY_COMMA,
     KEY_MINUS,
+    KEY_SEMICOLON,
+    KEY_OEM_1 = KEY_SEMICOLON,
     KEY_SLASH,
+    KEY_OEM_2 = KEY_SLASH,
     KEY_GRAVE,
+    KEY_OEM_3 = KEY_GRAVE,
     KEY_LBRACKET,
+    KEY_OEM_4 = KEY_LBRACKET,
     KEY_RBRACKET,
+    KEY_OEM_6 = KEY_RBRACKET,
     KEY_BACKSLASH,
+    KEY_OEM_5 = KEY_BACKSLASH,
     KEY_QUOTE,
+    KEY_OEM_7 = KEY_QUOTE,
+    KEY_OEM_8,
+    KEY_OEM_102,
+    KEY_OEM_SPECIFIC1,
+    KEY_OEM_SPECIFIC2,
+    KEY_OEM_SPECIFIC3,
+    KEY_OEM_CLEAR,
 
     // TODO(hayden): Most of these values are untested
     KEY_BROWSER_BACK,
@@ -147,15 +176,15 @@ typedef enum te_keys
 
     KEY_LAUNCH_MAIL,
     KEY_LAUNCH_MEDIASELECT,
-    KEY_LAUNCH_APP1,
-    KEY_LAUNCH_APP2,
+    KEY_LAUNCH_APPLICATION1,
+    KEY_LAUNCH_APPLICATION2,
 
     KEY_HELP,
     KEY_MENU,
     KEY_PRINT,
     KEY_SELECT,
     KEY_EXEC, // TODO(hayden): KEY_EXECUTE was already defined somewhere... Undefine it or leave this as the only abbreviated key?
-    KEY_APPLICATION,
+    KEY_APPLICATIONS,
     KEY_SLEEP,  
 
     // TODO(hayden): Where are VK_IME_* defined???
@@ -168,12 +197,12 @@ typedef enum te_keys
     KEY_IME_PROCESS,
 
     KEY_MODE_KANA,
-    KEY_MODE_HANGEUL,
-    KEY_MODE_HANGUL,
+    KEY_MODE_HANGEUL = KEY_MODE_KANA,
+    KEY_MODE_HANGUL = KEY_MODE_KANA,
     KEY_MODE_JUNJA,
     KEY_MODE_FINAL,
     KEY_MODE_HANJA,
-    KEY_MODE_KANJI,
+    KEY_MODE_KANJI = KEY_MODE_HANJA,
 
     KEY_ATTN,
     KEY_CRSEL,
@@ -183,20 +212,39 @@ typedef enum te_keys
     KEY_ZOOM,
     KEY_NONAME,
     KEY_PA1,
+} te_event_key_type;
 
-    KEY_OEM_1,
-    KEY_OEM_2,
-    KEY_OEM_3,
-    KEY_OEM_4,
-    KEY_OEM_5,
-    KEY_OEM_6,
-    KEY_OEM_7,
-    KEY_OEM_8,
-    KEY_OEM_102,
-    KEY_OEM_SPEC1,
-    KEY_OEM_SPEC2,
-    KEY_OEM_SPEC3,
-    KEY_OEM_CLEAR,
-} te_keys;
+typedef struct te_event_keyboard
+{
+    te_event_key_type KeyType;
+    b32 IsDown;
+} te_event_keyboard;
+
+// TODO(hayden): Preface with TE_EVENT or not?
+typedef enum te_event_mouse_event_type
+{
+    TE_EVENT_MOUSE_MOVE,
+    TE_EVENT_MOUSE_CLICK,
+} te_event_mouse_event_type;
+
+typedef struct te_event_mouse
+{
+    te_event_mouse_event_type Type;
+    u32 X, Y;
+    s16 WheelDelta;
+    f32 NormalizedX, NormalizedY;
+    te_event_mouse_button Button;
+    b32 IsDown;
+} te_event_mouse;
+
+typedef struct te_event
+{
+    te_event_type Type;
+    union
+    {
+        struct { te_event_keyboard Keyboard; };
+        struct { te_event_mouse Mouse; };
+    };
+} te_event;
 
 #endif // TINYENGINE_PLATFORM_H
