@@ -247,4 +247,13 @@ typedef struct te_event
     };
 } te_event;
 
+typedef struct tiny_platform_audio
+{
+    u32 ChannelCount;
+    u32 SampleRate;
+    s32 SampleCount;
+    
+    void *Buffer;
+} tiny_platform_audio;
+
 #endif // TINYENGINE_PLATFORM_H

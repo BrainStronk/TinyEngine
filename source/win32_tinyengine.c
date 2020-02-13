@@ -1,7 +1,15 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+
+#define CINTERFACE
+#define COBJMACROS
+#define D3D11_NO_HELPERS
 #include <d3d11.h>
 #include <dxgi.h>
+
+#include <initguid.h>
+#include <audioclient.h>
+#include <mmdeviceapi.h>
 
 #ifndef STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_IMPLEMENTATION
@@ -23,6 +31,11 @@ static D3D_FEATURE_LEVEL ActiveFeatureLevel;
 static te_event Global_EventQueue[512];
 static int Global_EventQueueIndex;
 
+DEFINE_GUID(CLSID_MMDeviceEnumerator, 0xBCDE0395, 0xE52F, 0x467C, 0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E);
+DEFINE_GUID(IID_IMMDeviceEnumerator, 0xA95664D2, 0x9614, 0x4F35, 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6);
+DEFINE_GUID(IID_IAudioClient, 0x1CB9AD4C, 0xDBFA, 0x4C32, 0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2);
+DEFINE_GUID(IID_IAudioRenderClient, 0xF294ACFC, 0x3146, 0x4483, 0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2);
+
 // TODO(hayden): Better name for this?
 static void
 PushInputEvent(te_event Event)
@@ -42,6 +55,126 @@ Win32PrintDebugString(char* Format, ...)
     stbsp_vsprintf(Buffer, Format, ArgumentList);
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
+}
+
+typedef struct win32_audio_thread_params
+{
+    IAudioClient *AudioClient;
+    IAudioRenderClient *AudioRenderClient;    
+    u32 SamplesPerSecond;
+    u32 ChannelCount;
+} win32_audio_thread_params;
+
+static DWORD WINAPI
+Win32AudioThread(void *Parameter)
+{
+    win32_audio_thread_params *Params = (win32_audio_thread_params *)Parameter;
+    if(Params)
+    {
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_BELOW_NORMAL);
+
+        HANDLE BufferReadyEvent = CreateEvent(0, 0, 0, 0);
+        if(BufferReadyEvent != INVALID_HANDLE_VALUE)
+        {
+            if(Params->AudioClient->lpVtbl->SetEventHandle(Params->AudioClient, BufferReadyEvent) == 0)
+            {
+                UINT BufferSize = 0;
+                if(Params->AudioClient->lpVtbl->GetBufferSize(Params->AudioClient, &BufferSize) == 0)
+                {
+                    if(Params->AudioClient->lpVtbl->Start(Params->AudioClient) == 0)
+                    {
+                        for(;;)
+                        {
+                            if(WaitForSingleObject(BufferReadyEvent, INFINITE) == WAIT_OBJECT_0)
+                            {
+                                UINT Padding = 0;
+                                if(Params->AudioClient->lpVtbl->GetCurrentPadding(Params->AudioClient, &Padding) == 0)
+                                {
+                                    UINT WriteAmount = BufferSize - Padding;
+                                    if(WriteAmount > 0)
+                                    {
+                                        BYTE *Buffer = 0;
+                                        if(Params->AudioRenderClient->lpVtbl->GetBuffer(Params->AudioRenderClient, WriteAmount, &Buffer) == 0)
+                                        {
+                                            tiny_platform_audio Audio = {0};
+                                            Audio.ChannelCount = Params->ChannelCount;
+                                            Audio.SampleCount = Params->SamplesPerSecond;
+                                            Audio.SampleCount = WriteAmount;
+                                            Audio.Buffer = Buffer;
+
+                                            // Pass this buffer to the engine and have it fill it with the audio samples
+                                            // that the game/app layer requests to play
+
+                                            Params->AudioRenderClient->lpVtbl->ReleaseBuffer(Params->AudioRenderClient, WriteAmount, 0);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return(0);
+}
+
+static b32 
+Win32InitWASAPI()
+{
+    b32 Result = false;
+
+    IMMDeviceEnumerator *DeviceEnumerator = 0;
+    if(CoCreateInstance(&CLSID_MMDeviceEnumerator, 0, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void **)&DeviceEnumerator) == 0)
+    {
+        IMMDevice *Device = 0;
+        if(DeviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(DeviceEnumerator, eRender, eConsole, &Device) == 0)
+        {
+            DeviceEnumerator->lpVtbl->Release(DeviceEnumerator);
+
+            IAudioClient *AudioClient = 0;
+            if(Device->lpVtbl->Activate(Device, &IID_IAudioClient, CLSCTX_ALL, 0, (void **)&AudioClient) == 0)
+            {
+                WAVEFORMATEX WaveFormat = {0};
+                WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
+                WaveFormat.nChannels = 2;
+                WaveFormat.nSamplesPerSec = 44100;
+                WaveFormat.wBitsPerSample = 16;
+                WaveFormat.nBlockAlign = (WaveFormat.nChannels * WaveFormat.wBitsPerSample) / 8;
+                WaveFormat.nAvgBytesPerSec = (WaveFormat.nSamplesPerSec * WaveFormat.nBlockAlign);
+
+                s64 SecondsToHundredNanos = 10000000;
+                REFERENCE_TIME BufferDuration = (SecondsToHundredNanos / 20);
+                if(AudioClient->lpVtbl->Initialize(AudioClient, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_RATEADJUST | AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM, BufferDuration, 0, &WaveFormat, 0) == 0)
+                {
+                    IAudioRenderClient *AudioRenderClient = 0;
+                    if(AudioClient->lpVtbl->GetService(AudioClient, &IID_IAudioRenderClient, (void **)&AudioRenderClient) == 0)
+                    {
+                        win32_audio_thread_params *AudioThreadParams = HeapAlloc(GetProcessHeap(), 0, sizeof(win32_audio_thread_params));
+                        if(AudioThreadParams)
+                        {
+                            AudioThreadParams->AudioClient = AudioClient;
+                            AudioThreadParams->AudioRenderClient = AudioRenderClient;
+                            AudioThreadParams->SamplesPerSecond = WaveFormat.nSamplesPerSec;
+                            AudioThreadParams->ChannelCount = WaveFormat.nChannels;
+
+                            if(CreateThread(0, 0, Win32AudioThread, AudioThreadParams, 0, 0) != INVALID_HANDLE_VALUE)
+                            {
+                                Result = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else
+    {
+        // TODO(zak): Logging
+    }
+    
+    return(Result);
 }
 
 static b32 
@@ -984,6 +1117,26 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
             {
                 if(Win32InitD3D11(Window))
                 {
+                    b32 DidComInitialize = true;
+                    if(CoInitializeEx(0, COINIT_MULTITHREADED) != S_OK)
+                    {
+                        // NOTE(zak): I've seen CoInitializeEx fail on some systems before so if it fails lets try to just CoInitalize
+                        // TODO(zak): Logging that CoInitializeEx failed
+                        if(CoInitialize(0) != S_OK)
+                        {
+                            // TODO(zak): CoInitialize failed as well lets log this
+                            DidComInitialize = false;
+                        }
+                    }
+
+                    if(DidComInitialize)
+                    {
+                        if(!Win32InitWASAPI())
+                        {
+                            // TODO(zak): Logging
+                        }
+                    }
+
                     if(ShowWindow(Window, SW_SHOW) == 0)
                     {
                         IsRunning = true;
