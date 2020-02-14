@@ -590,7 +590,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             int Offset = 10 + 26;
                             for(int VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
                             {
-                                Event.Keyboard.KeyType = VKIndex - (VK_NUMPAD0-Offset);
+                                if(VKIndex == VirtualKey)
+                                {
+                                    Event.Keyboard.KeyType = VKIndex - (VK_NUMPAD0-Offset);
+                                }
                             }
                         }
                         else if((VirtualKey >= VK_F1) && (VirtualKey <= VK_F24))
@@ -598,7 +601,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             int Offset = 10 + 26 + 16;
                             for(int VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
                             {
-                                Event.Keyboard.KeyType = VKIndex - (VK_F1-Offset);
+                                if(VKIndex == VirtualKey)
+                                {
+                                    Event.Keyboard.KeyType = VKIndex - (VK_F1-Offset);
+                                }
                             }
                         }
                         else if((VirtualKey >= VK_LEFT) && (VirtualKey <= VK_DOWN))
@@ -606,7 +612,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             int Offset = 10 + 26 + 16 + 24;
                             for(int VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
                             {
-                                Event.Keyboard.KeyType = VKIndex - (VK_LEFT-Offset);
+                                if(VKIndex == VirtualKey)
+                                {
+                                    Event.Keyboard.KeyType = VKIndex - (VK_LEFT-Offset);
+                                }
                             }
                         }
                         else
