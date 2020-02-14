@@ -556,8 +556,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             } break;
                         }
 
-                        // b32 IsUp = (Flags & RI_KEY_BREAK); 
-                        b32 IsDown = (!Flags || !RI_KEY_BREAK); // TODO(hayden): This is the logical negation of "IsUp", right?
+                        b32 IsDown = !(Flags & RI_KEY_BREAK);
 
                         tiny_event Event = {0};
                         Event.Type = TINY_EVENT_TYPE_KEYBOARD;
