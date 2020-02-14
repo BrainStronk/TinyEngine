@@ -382,9 +382,29 @@ const char* GetVulkanResultString(VkResult result);
 #define VK_CHECK(call)
 #endif
 
-VkAllocationCallbacks allocator;
-VkAllocationCallbacks* allocators = NULL;//&allocator;
-VkInstance instance;
+//VULKAN GLOBALS
+//-----------------------------------------------------
+VkAllocationCallbacks Allocator;
+VkAllocationCallbacks* VkAllocators = NULL;//&Allocator;
+VkInstance Instance;
+
+//Gpu init:
+VkPhysicalDevice GpuDevice;
+VkExtensionProperties* DeviceExtensionProperties;
+u32 DeviceExtPropCount;
+VkPhysicalDeviceProperties DeviceProperties;
+VkPhysicalDeviceFeatures DeviceFeatures;
+
+//Gpu Queues
+#define NUM_QUEUES 1
+VkQueue Queues[NUM_QUEUES];
+u32 QueueIndex[NUM_QUEUES];
+float QueuePriority[NUM_QUEUES];
+
+//Surface
+VkSurfaceKHR VkSurface;
+
+//-----------------------------------------------------
 
 const char* GetVulkanResultString(VkResult result)
 {
@@ -441,9 +461,11 @@ const char* GetVulkanResultString(VkResult result)
 	}
 }
 
-b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions)
+b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions, void(SurfaceCallback(VkSurfaceKHR)))
 {
-	if(!GetProcAddr)
+	u32 i;
+
+	if(!GetProcAddr || !SurfaceCallback)
 	{
 		return false;
 	}
@@ -470,7 +492,6 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const cha
 	{
 		if(RequiredExtensions[c] != NULL)
 		{
-			u32 i;
 			for(i = 0; i<ExtensionCount; i++)
 			{
 				if(strstr((char*)&InstanceExtensions[i], RequiredExtensions[c]))
@@ -490,7 +511,7 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const cha
 _continue:;
 	}
 
-	VkApplicationInfo app_info =
+	VkApplicationInfo AppI =
 	{
 		VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		NULL,
@@ -501,17 +522,20 @@ _continue:;
 		VK_MAKE_VERSION(1,0,0)
 	};
 
-	VkInstanceCreateInfo instance_create_info;
-	memset(&instance_create_info, 0, sizeof(instance_create_info));
-	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	instance_create_info.pApplicationInfo = &app_info;
-	instance_create_info.enabledExtensionCount = ReqExCount;
-	instance_create_info.ppEnabledExtensionNames = &RequiredExtensions[0];
+	VkInstanceCreateInfo InstanceCI;
+	InstanceCI.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	InstanceCI.pNext = NULL;
+	InstanceCI.flags = 0;
+	InstanceCI.pApplicationInfo = &AppI;
+	InstanceCI.enabledLayerCount = 0;
+	InstanceCI.ppEnabledLayerNames = NULL;
+	InstanceCI.enabledExtensionCount = ReqExCount;
+	InstanceCI.ppEnabledExtensionNames = &RequiredExtensions[0];
 
 
 	//define custom vulkan allocators
 	//allocators = nullptr;
-	if(allocators)
+	if(VkAllocators)
 	{
 		//allocators->pUserData = nullptr;
 		//allocators->pfnAllocation =
@@ -520,10 +544,10 @@ _continue:;
 		//allocators->pfnInternalAllocation = nullptr;
 		//allocators->pfnInternalFree = nullptr;
 	}
-	VK_CHECK(vkCreateInstance(&instance_create_info, allocators, &instance));
+	VK_CHECK(vkCreateInstance(&InstanceCI, VkAllocators, &Instance));
 
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION( name )				\
-    	name = (PFN_##name) (vkGetInstanceProcAddr(instance, #name));	\
+    	name = (PFN_##name) (vkGetInstanceProcAddr(Instance, #name));	\
     	if(name == NULL)							\
       	{									\
 		Fatal("Could not load instance Vulkan function: %s", #name);	\
@@ -537,9 +561,9 @@ _continue:;
 	//(Kyryl): For what it takes, do not touch this code !
 	//C preprocessor is an evil thing!
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
-	for(u32 i = 0; i<ReqExCount; i++) {				\
+	for(i = 0; i<ReqExCount; i++) {				\
 		if( strstr(RequiredExtensions[i], extension) ) { \
-			name = (PFN_##name)vkGetInstanceProcAddr( instance, #name );	\
+			name = (PFN_##name)vkGetInstanceProcAddr( Instance, #name );	\
 			if( name == NULL ){						\
 				Warn("Could not load instance-level Vulkan function named: %s", #name);  \
 				return false;                                                        \
@@ -549,6 +573,69 @@ _continue:;
 	}  
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
+
+	u32 DeviceCount = 0;
+	VK_CHECK(vkEnumeratePhysicalDevices(Instance, &DeviceCount, NULL));
+	ASSERT(DeviceCount, "No Gpus enumarated");
+
+	VkPhysicalDevice Devices[DeviceCount];
+	VK_CHECK(vkEnumeratePhysicalDevices(Instance, &DeviceCount, &Devices[0]));
+	
+	u32 DeviceExtensionCount = 0;
+	GpuDevice = VK_NULL_HANDLE;
+	for(i = 0; i<DeviceCount; i++)
+	{
+		VK_CHECK(vkEnumerateDeviceExtensionProperties(Devices[i], NULL, &DeviceExtensionCount, NULL));
+
+		VkExtensionProperties ExtensionProperties[DeviceExtensionCount];
+
+		VK_CHECK(vkEnumerateDeviceExtensionProperties(Devices[i], NULL, &DeviceExtensionCount, &ExtensionProperties[0]));
+
+		vkGetPhysicalDeviceFeatures(Devices[i], &DeviceFeatures);
+		vkGetPhysicalDeviceProperties(Devices[i], &DeviceProperties);
+
+		if(DeviceProperties.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && DeviceProperties.deviceType != VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		{
+			continue;
+		}
+		else
+		{
+			//Found a Gpu
+			int size = (sizeof(VkExtensionProperties) * DeviceExtensionCount);
+			DeviceExtensionProperties = (VkExtensionProperties*) malloc(size);
+			memcpy(DeviceExtensionProperties, ExtensionProperties, size);
+			DeviceExtPropCount = DeviceExtensionCount;
+			GpuDevice = Devices[i];
+
+			Trace("Using Device: %s", DeviceProperties.deviceName);
+			break;
+		}
+
+	}
+	ASSERT(GpuDevice, "Found no matching GpuDevice!");
+
+	//Vulkan Queue init. 
+	u32 QFamiliesCount;
+	vkGetPhysicalDeviceQueueFamilyProperties(GpuDevice, &QFamiliesCount, NULL);
+	ASSERT(QFamiliesCount, "Could not enumerate family queues!");
+
+	VkQueueFamilyProperties QueueFamilies[QFamiliesCount];
+	vkGetPhysicalDeviceQueueFamilyProperties(GpuDevice, &QFamiliesCount, &QueueFamilies[0]);
+
+	//(Kyryl): Find a graphics Queue.
+	//In case we require move than 1 queue, just copy paste this code with different flags.
+	for(i = 0; i<QFamiliesCount; ++i)
+	{
+		if(QueueFamilies[i].queueCount > 0 && (QueueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT)
+		{
+			break;
+		}
+	}
+	ASSERT(i != QFamiliesCount, "Graphics Queue not found.");
+	QueueIndex[0] = i;
+	QueuePriority[0] = 1.0f;
+
+	SurfaceCallback(VkSurface); //calls platform layer.
 
 	return true;
 

@@ -30,6 +30,18 @@ typedef struct linux_wnd
 
 static linux_wnd Wnd;
 
+void SurfaceCallback(VkSurfaceKHR Surface)
+{
+	VkXlibSurfaceCreateInfoKHR SurfaceCI;
+	SurfaceCI.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+	SurfaceCI.pNext = NULL;
+	SurfaceCI.flags = 0;
+	SurfaceCI.dpy = Wnd.Display;
+	SurfaceCI.window = Wnd.Window;
+
+	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, &Surface));
+}
+
 int main(int argc, char** argv)
 {
 	log_set_level(0);
@@ -72,7 +84,7 @@ int main(int argc, char** argv)
 
 	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_DEEPBIND);
 	PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
-	if(!InitVulkan(&ProcAddr, ArrayCount(extensions), extensions))
+	if(!InitVulkan(&ProcAddr, ArrayCount(extensions), extensions, SurfaceCallback))
 	{
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);
