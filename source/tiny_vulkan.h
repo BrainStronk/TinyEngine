@@ -441,9 +441,9 @@ const char* GetVulkanResultString(VkResult result)
 	}
 }
 
-b32 InitVulkan(void* LibHandle, PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions)
+b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions)
 {
-	if(!LibHandle || !GetProcAddr)
+	if(!GetProcAddr)
 	{
 		return false;
 	}
@@ -534,8 +534,10 @@ _continue:;
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
 
-#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
-	for(uint32_t i = 0; i<ReqExCount; i++) {				\
+	//(Kyryl): For what it takes, do not touch this code !
+	//C preprocessor is an evil thing!
+	#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
+	for(u32 i = 0; i<ReqExCount; i++) {				\
 		if( strstr(RequiredExtensions[i], extension) ) { \
 			name = (PFN_##name)vkGetInstanceProcAddr( instance, #name );	\
 			if( name == NULL ){						\
@@ -544,7 +546,7 @@ _continue:;
 			}else                                                                       \
 			{Info("Loaded function from extension: %s", #name);}		\
 		}\
-}  
+	}  
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
 

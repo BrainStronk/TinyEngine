@@ -43,4 +43,10 @@ function linux()
 	gcc -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
 }
 
+function linux_tcc()
+{
+	assertInstalled tcc
+	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
+}
+
 "$@"

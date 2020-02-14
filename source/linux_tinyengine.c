@@ -3,6 +3,7 @@
 #define TINYENGINE_DEBUG
 
 #include <X11/Xlib.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -69,9 +70,9 @@ int main(int argc, char** argv)
 #endif
 	};
 
-	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW);
+	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_DEEPBIND);
 	PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
-	if(!InitVulkan(VulkanLoader, &ProcAddr, ArrayCount(extensions), extensions))
+	if(!InitVulkan(&ProcAddr, ArrayCount(extensions), extensions))
 	{
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);
