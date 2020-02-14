@@ -264,6 +264,8 @@ typedef struct tiny_platform
 
 tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform layer?
 
+#define TINY_EVENT_MAX_KEYS 163
+
 //////
 
 // TODO(hayden): Better name for this?

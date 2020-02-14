@@ -331,6 +331,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                 {
                     // Mouse Buttons & Wheel
                     tiny_event Event = {0};
+                    Event.Type = TINY_EVENT_TYPE_MOUSE;
                     Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
                     Event.Mouse.Button = TINY_EVENT_NO_INPUT;
                     Event.Mouse.IsDown = TINY_EVENT_NO_INPUT;
@@ -1147,14 +1148,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes) -- Move to engine!!
-                            for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
-                            {
-                                tiny_event NoEvent = {0};
-                                Global_Platform.EventQueue[ClearIndex] = NoEvent;
-                            }
-                            Global_Platform.EventQueueIndex = 0;
-
                             // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
                             DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
 
@@ -1163,6 +1156,16 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             
                             Tiny_Update(Global_Platform);
                             Tiny_Render();
+
+                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes) -- Move to engine!!
+                            // TODO(hayden): This should set everything to TINY_EVENT_NO_INPUT
+                            for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
+                            {
+                                tiny_event NoEvent = {TINY_EVENT_NO_INPUT};
+                                NoEvent.Mouse.Button = TINY_EVENT_NO_INPUT;
+                                Global_Platform.EventQueue[ClearIndex] = NoEvent;
+                            }
+                            Global_Platform.EventQueueIndex = 0;
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }
