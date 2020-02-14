@@ -30,7 +30,7 @@ typedef struct linux_wnd
 
 static linux_wnd Wnd;
 
-void SurfaceCallback(VkSurfaceKHR Surface)
+void SurfaceCallback(VkSurfaceKHR* Surface)
 {
 	VkXlibSurfaceCreateInfoKHR SurfaceCI;
 	SurfaceCI.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
@@ -39,7 +39,7 @@ void SurfaceCallback(VkSurfaceKHR Surface)
 	SurfaceCI.dpy = Wnd.Display;
 	SurfaceCI.window = Wnd.Window;
 
-	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, &Surface));
+	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
 }
 
 int main(int argc, char** argv)

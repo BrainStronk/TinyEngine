@@ -389,6 +389,7 @@ VkAllocationCallbacks* VkAllocators = NULL;//&Allocator;
 VkInstance Instance;
 
 //Gpu init:
+VkDevice LogicalDevice;
 VkPhysicalDevice GpuDevice;
 VkExtensionProperties* DeviceExtensionProperties;
 u32 DeviceExtPropCount;
@@ -403,6 +404,8 @@ float QueuePriority[NUM_QUEUES];
 
 //Surface
 VkSurfaceKHR VkSurface;
+VkPresentModeKHR PresentationMode;
+VkSurfaceCapabilitiesKHR SurfaceCapabilities;
 
 //-----------------------------------------------------
 
@@ -461,7 +464,7 @@ const char* GetVulkanResultString(VkResult result)
 	}
 }
 
-b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions, void(SurfaceCallback(VkSurfaceKHR)))
+b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions, void(SurfaceCallback(VkSurfaceKHR*)))
 {
 	u32 i;
 
@@ -505,7 +508,7 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const cha
 			{
 				Debug("%s", (char*)&InstanceExtensions[i]);
 			}
-			ASSERT(0, "Extension %s  is not supported!", RequiredExtensions[c]);
+			Fatal("Extension %s  is not supported!", RequiredExtensions[c]);
 			return false;
 		}
 _continue:;
@@ -576,7 +579,7 @@ _continue:;
 
 	u32 DeviceCount = 0;
 	VK_CHECK(vkEnumeratePhysicalDevices(Instance, &DeviceCount, NULL));
-	ASSERT(DeviceCount, "No Gpus enumarated");
+	ASSERT(DeviceCount, "No Gpus enumerated");
 
 	VkPhysicalDevice Devices[DeviceCount];
 	VK_CHECK(vkEnumeratePhysicalDevices(Instance, &DeviceCount, &Devices[0]));
@@ -614,6 +617,30 @@ _continue:;
 	}
 	ASSERT(GpuDevice, "Found no matching GpuDevice!");
 
+	//Surface created via platform layer callback.
+	SurfaceCallback(&VkSurface); 
+
+	u32 ModesCount = 0;
+	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(GpuDevice, VkSurface, &ModesCount, NULL));
+	ASSERT(ModesCount, "Failed to enumerate presentation modes!");
+
+	VkPresentModeKHR PresentModes[ModesCount];
+	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(GpuDevice, VkSurface, &ModesCount, &PresentModes[0]));
+
+	//TODO(Kyryl): This is important, need a proper fallback if not listed.
+	PresentationMode = VK_PRESENT_MODE_FIFO_KHR;
+	for(i = 0; i<ModesCount; i++)
+	{
+		if(PresentModes[i]==PresentationMode)
+		{
+			break;
+		}
+	}
+	ASSERT(i != ModesCount, "Presentation mode is not supported!");
+
+	//NOTE(Kyryl): This is necessary for swapchain resize.
+	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GpuDevice, VkSurface, &SurfaceCapabilities));
+
 	//Vulkan Queue init. 
 	u32 QFamiliesCount;
 	vkGetPhysicalDeviceQueueFamilyProperties(GpuDevice, &QFamiliesCount, NULL);
@@ -635,7 +662,60 @@ _continue:;
 	QueueIndex[0] = i;
 	QueuePriority[0] = 1.0f;
 
-	SurfaceCallback(VkSurface); //calls platform layer.
+	VkBool32 PresentationSupport = VK_FALSE;
+	VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(GpuDevice, i, VkSurface, &PresentationSupport));
+	ASSERT(PresentationSupport, "Presentation not supported on Queue index %d", i);
+	QueueIndex[0] = i;
+
+
+	//LogicalDevice
+	//The reason it's named like this is because we can derive multiple of these 
+	//objects from single GpuDevice. Probably the most used object in Vulkan.
+
+	const char* DeviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+	for(int c = 0; c < ArrayCount(DeviceExtensions); c++)
+	{
+		for(i = 0; i < DeviceExtPropCount; i++)
+		{
+			if(strstr(DeviceExtensions[c], (char*)&DeviceExtensionProperties[i]))
+			{
+				Info("Using device extension: %s ", DeviceExtensions[c]);
+				goto __continue;
+			}
+		}
+		Debug("Available Extensions: ");
+		for(i = 0; i < DeviceExtPropCount; i++)
+		{
+			Debug("%s", (char*)&DeviceExtensionProperties[i]);
+		}
+		Fatal("Extension %s is not supported by physical device!", DeviceExtensions[c]);
+		return false;
+__continue:;
+	}
+
+	VkDeviceQueueCreateInfo QueueCI[NUM_QUEUES];
+	for(i = 0; i<NUM_QUEUES; i++)
+	{
+		QueueCI[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		QueueCI[i].pNext = NULL;
+		QueueCI[i].flags = 0;
+		QueueCI[i].queueFamilyIndex = QueueIndex[i];
+		QueueCI[i].queueCount = 1;
+		QueueCI[i].pQueuePriorities = &QueuePriority[i];
+	}
+
+	VkDeviceCreateInfo DeviceCI;
+	DeviceCI.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	DeviceCI.pNext = NULL;
+	DeviceCI.flags = 0;
+	DeviceCI.queueCreateInfoCount = NUM_QUEUES;
+	DeviceCI.pQueueCreateInfos = &QueueCI[0];
+	DeviceCI.enabledLayerCount = 0;
+	DeviceCI.ppEnabledLayerNames = NULL;
+	DeviceCI.enabledExtensionCount = ArrayCount(DeviceExtensions);
+	DeviceCI.ppEnabledExtensionNames = &DeviceExtensions[0];
+	DeviceCI.pEnabledFeatures = &DeviceFeatures;
+	VK_CHECK(vkCreateDevice(GpuDevice, &DeviceCI, VkAllocators, &LogicalDevice));
 
 	return true;
 
