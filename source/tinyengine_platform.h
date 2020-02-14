@@ -1,24 +1,24 @@
 #ifndef TINYENGINE_PLATFORM_H
 #define TINYENGINE_PLATFORM_H
 
-#define TE_EVENT_NO_INPUT -1
-typedef enum te_event_type
+#define TINY_EVENT_NO_INPUT -1
+typedef enum tiny_event_type
 {
-    TE_EVENT_TYPE_KEYBOARD,
-    TE_EVENT_TYPE_MOUSE,  
-} te_event_type;
+    TINY_EVENT_TYPE_KEYBOARD,
+    TINY_EVENT_TYPE_MOUSE,  
+} tiny_event_type;
 
-typedef enum te_event_mouse_button
+typedef enum tiny_event_mouse_button
 {
     MOUSE_LEFT,
     MOUSE_MIDDLE,
     MOUSE_RIGHT,
     MOUSE_EXTRA1,
     MOUSE_EXTRA2,
-} te_event_mouse_button;
+} tiny_event_mouse_button;
 
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
-typedef enum te_event_key_type
+typedef enum tiny_event_key_type
 {
     KEY_0,
     KEY_1,
@@ -212,40 +212,40 @@ typedef enum te_event_key_type
     KEY_ZOOM,
     KEY_NONAME,
     KEY_PA1,
-} te_event_key_type;
+} tiny_event_key_type;
 
-typedef struct te_event_keyboard
+typedef struct tiny_event_keyboard
 {
-    te_event_key_type KeyType;
+    tiny_event_key_type KeyType;
     b32 IsDown;
-} te_event_keyboard;
+} tiny_event_keyboard;
 
-// TODO(hayden): Preface with TE_EVENT or not?
-typedef enum te_event_mouse_event_type
+// TODO(hayden): Preface with TINY_EVENT or not?
+typedef enum tiny_event_mouse_event_type
 {
-    TE_EVENT_MOUSE_MOVE,
-    TE_EVENT_MOUSE_CLICK,
-} te_event_mouse_event_type;
+    TINY_EVENT_MOUSE_MOVE,
+    TINY_EVENT_MOUSE_CLICK,
+} tiny_event_mouse_event_type;
 
-typedef struct te_event_mouse
+typedef struct tiny_event_mouse
 {
-    te_event_mouse_event_type Type;
+    tiny_event_mouse_event_type Type;
     u32 X, Y;
     s16 WheelDelta;
     f32 NormalizedX, NormalizedY;
-    te_event_mouse_button Button;
+    tiny_event_mouse_button Button;
     b32 IsDown;
-} te_event_mouse;
+} tiny_event_mouse;
 
-typedef struct te_event
+typedef struct tiny_event
 {
-    te_event_type Type;
+    tiny_event_type Type;
     union
     {
-        struct { te_event_keyboard Keyboard; };
-        struct { te_event_mouse Mouse; };
+        struct { tiny_event_keyboard Keyboard; };
+        struct { tiny_event_mouse Mouse; };
     };
-} te_event;
+} tiny_event;
 
 typedef struct tiny_platform_audio
 {
@@ -255,5 +255,24 @@ typedef struct tiny_platform_audio
     
     void *Buffer;
 } tiny_platform_audio;
+
+typedef struct tiny_platform
+{
+    tiny_event EventQueue[512];
+    int EventQueueIndex;
+} tiny_platform;
+
+tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform layer?
+
+//////
+
+// TODO(hayden): Better name for this?
+// TODO(hayden): tinyengine_platform.c?
+static void
+Tiny_PushInputEvent(tiny_event Event)
+{
+    Global_Platform.EventQueue[Global_Platform.EventQueueIndex] = Event;
+    ++Global_Platform.EventQueueIndex;
+}
 
 #endif // TINYENGINE_PLATFORM_H

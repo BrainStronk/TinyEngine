@@ -19,7 +19,9 @@
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
-#define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad
+#include "tinyengine.c"
+
+#define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad (PS3)
 
 static b32 IsRunning;
 static ID3D11Device *Device;
@@ -28,21 +30,10 @@ static IDXGISwapChain *Swapchain;
 static ID3D11RenderTargetView *RenderTargetView;
 static D3D_FEATURE_LEVEL ActiveFeatureLevel;
 
-static te_event Global_EventQueue[512];
-static int Global_EventQueueIndex;
-
 DEFINE_GUID(CLSID_MMDeviceEnumerator, 0xBCDE0395, 0xE52F, 0x467C, 0x8E, 0x3D, 0xC4, 0x57, 0x92, 0x91, 0x69, 0x2E);
 DEFINE_GUID(IID_IMMDeviceEnumerator, 0xA95664D2, 0x9614, 0x4F35, 0xA7, 0x46, 0xDE, 0x8D, 0xB6, 0x36, 0x17, 0xE6);
 DEFINE_GUID(IID_IAudioClient, 0x1CB9AD4C, 0xDBFA, 0x4C32, 0xB1, 0x78, 0xC2, 0xF5, 0x68, 0xA7, 0x03, 0xB2);
 DEFINE_GUID(IID_IAudioRenderClient, 0xF294ACFC, 0x3146, 0x4483, 0xA7, 0xBF, 0xAD, 0xDC, 0xA7, 0xC2, 0x60, 0xE2);
-
-// TODO(hayden): Better name for this?
-static void
-PushInputEvent(te_event Event)
-{
-    Global_EventQueue[Global_EventQueueIndex] = Event;
-    ++Global_EventQueueIndex;
-}
 
 ////////////////////////////////////
 
@@ -295,7 +286,7 @@ Win32InitD3D11(HWND Window)
                 }
                 else
                 {
-                    // TOOD(zak): Logging
+                    // TODO(zak): Logging
                 }
             }
             else
@@ -339,10 +330,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                 if(RawInput->header.dwType == RIM_TYPEMOUSE)
                 {
                     // Mouse Buttons & Wheel
-                    te_event Event = {0};
-                    Event.Mouse.Type = TE_EVENT_MOUSE_CLICK;
-                    Event.Mouse.Button = TE_EVENT_NO_INPUT;
-                    Event.Mouse.IsDown = TE_EVENT_NO_INPUT;
+                    tiny_event Event = {0};
+                    Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
+                    Event.Mouse.Button = TINY_EVENT_NO_INPUT;
+                    Event.Mouse.IsDown = TINY_EVENT_NO_INPUT;
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -394,32 +385,33 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                     }
 
                     // TODO(hayden): Assert this?
-                    if(Event.Mouse.Button != TE_EVENT_NO_INPUT) // Don't push events we aren't choosing to handle
+                    if(Event.Mouse.Button != TINY_EVENT_NO_INPUT) // Don't push events we aren't choosing to handle
                     {
-                        PushInputEvent(Event);
+                        Tiny_PushInputEvent(Event);
                     }
                 }
                 else if(RawInput->header.dwType == RIM_TYPEKEYBOARD)
                 {
+                    // TODO(hayden): Handle Alt-F4!
                     const RAWKEYBOARD RawKeyboard = RawInput->data.keyboard;
 
                     UINT VirtualKey = RawKeyboard.VKey;
                     UINT ScanCode = RawKeyboard.MakeCode;
                     UINT Flags = RawKeyboard.Flags;
 
-                    if(VirtualKey == VK_SHIFT)
-                    {
-                        VirtualKey = MapVirtualKeyW(ScanCode, MAPVK_VSC_TO_VK_EX); // Corrects Left/Right Shift w/ VK_LSHIFT/VK_RSHIFT
-                    }
-                    else if(VirtualKey == VK_NUMLOCK)
-                    {
-                        // Corrects PAUSE/BREAK and NUMLOCK having the same scan code.. And a bug--MapVirtualKey doesn't set the extended bit!
-                        ScanCode = (MapVirtualKeyW(VirtualKey, MAPVK_VK_TO_VSC) | 0x100);
-                    }
-
                     if(VirtualKey != 255)
                     {
-                        // e0 and e1 are escape sequences used for certain special keys, such as PRINT and PAUSE/BREAK.
+                        if(VirtualKey == VK_SHIFT)
+                        {
+                            VirtualKey = MapVirtualKeyW(ScanCode, MAPVK_VSC_TO_VK_EX); // Corrects Left/Right Shift w/ VK_LSHIFT/VK_RSHIFT
+                        }
+                        else if(VirtualKey == VK_NUMLOCK)
+                        {
+                            // Corrects PAUSE/BREAK and NUMLOCK having the same scan code.. And a bug--MapVirtualKey doesn't set the extended bit!
+                            ScanCode = (MapVirtualKeyW(VirtualKey, MAPVK_VK_TO_VSC) | 0x100);
+                        }
+
+                        // E0 and E1 are escape sequences used for certain special keys, such as PRINT and PAUSE/BREAK.
                         const b32 IsE0 = ((Flags & RI_KEY_E0) != 0);
                         const b32 IsE1 = ((Flags & RI_KEY_E1) != 0);
 
@@ -438,16 +430,16 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         // Assign the last of the weird ones
                         switch(VirtualKey)
                         {
-                            // right-hand CONTROL and ALT have their e0 bit set
+                            // Right-hand CONTROL and ALT have their E0 bit set
                             case VK_CONTROL:
                             {
                                 if(IsE0)
                                 {
-                                    VirtualKey = VK_RCONTROL; // Keys::RIGHT_CONTROL;
+                                    VirtualKey = VK_RCONTROL;
                                 }
                                 else
                                 {
-                                    VirtualKey = VK_LCONTROL; // Keys::LEFT_CONTROL;
+                                    VirtualKey = VK_LCONTROL;
                                 }
                             } break;
 
@@ -463,7 +455,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 }
                             } break;
 
-                            // NUMPAD ENTER has its e0 bit set
+                            // NUMPAD ENTER has its E0 bit set
                             case VK_RETURN:
                             {
                                 if(IsE0)
@@ -472,8 +464,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 } 
                             } break;
 
-                            // the standard INSERT, DELETE, HOME, END, PRIOR and NEXT keys will always have their e0 bit set, but the
-                            // corresponding keys on the NUMPAD will not.
+                            // The standard INSERT, DELETE, HOME, END, PRIOR and NEXT keys will always have their E0 bit set, but the corresponding keys on the NUMPAD will not
                             case VK_INSERT:
                             {
                                 if(!IsE0)
@@ -522,8 +513,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 }
                             } break;
 
-                            // the standard arrow keys will always have their e0 bit set, but the
-                            // corresponding keys on the NUMPAD will not.
+                            // The standard arrow keys will always have their E0 bit set, but the corresponding keys on the NUMPAD will not
                             case VK_LEFT:
                             {
                                 if(!IsE0)
@@ -556,7 +546,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 }
                             } break;
 
-                            // NUMPAD 5 doesn't have its e0 bit set
+                            // NUMPAD 5 doesn't have its E0 bit set
                             case VK_CLEAR:
                             {   
                                 if(!IsE0)
@@ -569,10 +559,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         // b32 IsUp = (Flags & RI_KEY_BREAK); 
                         b32 IsDown = (!Flags || !RI_KEY_BREAK); // TODO(hayden): This is the logical negation of "IsUp", right?
 
-                        te_event Event = {0};
-                        Event.Type = TE_EVENT_TYPE_KEYBOARD;
+                        tiny_event Event = {0};
+                        Event.Type = TINY_EVENT_TYPE_KEYBOARD;
                         Event.Keyboard.IsDown = IsDown;
-                        Event.Keyboard.KeyType = TE_EVENT_NO_INPUT;
+                        Event.Keyboard.KeyType = TINY_EVENT_NO_INPUT;
 
                         // Assign VirtualKey to Engine's te_key_type enum
                         if((VirtualKey >= '0') && (VirtualKey <= '9'))
@@ -1041,7 +1031,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             }
                         }
 
-                        PushInputEvent(Event);
+                        Tiny_PushInputEvent(Event);
 
                         // getting a human-readable string
                         //UINT Key = (ScanCode << 16) | (IsE0 << 24);
@@ -1055,9 +1045,9 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
         case WM_MOUSEMOVE:
         {
             // Cursor
-            te_event Event = {0};
-            Event.Type = TE_EVENT_TYPE_MOUSE;
-            Event.Mouse.Type = TE_EVENT_MOUSE_MOVE;
+            tiny_event Event = {0};
+            Event.Type = TINY_EVENT_TYPE_MOUSE;
+            Event.Mouse.Type = TINY_EVENT_MOUSE_MOVE;
             Event.Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
             Event.Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
 
@@ -1069,7 +1059,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
             Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
 
-            PushInputEvent(Event);
+            Tiny_PushInputEvent(Event);
         } break;
 
         default:
@@ -1149,13 +1139,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes)
-                            for(int ClearIndex = 0; ClearIndex < Global_EventQueueIndex; ++ClearIndex)
+                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes) -- Move to engine!!
+                            for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
                             {
-                                te_event NoEvent = {0};
-                                Global_EventQueue[ClearIndex] = NoEvent;
+                                tiny_event NoEvent = {0};
+                                Global_Platform.EventQueue[ClearIndex] = NoEvent;
                             }
-                            Global_EventQueueIndex = 0;
+                            Global_Platform.EventQueueIndex = 0;
 
                             // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
                             DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
@@ -1163,8 +1153,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
                             
-                            // Update App
-                            // Render App
+                            Tiny_Update(Global_Platform);
+                            Tiny_Render();
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }
