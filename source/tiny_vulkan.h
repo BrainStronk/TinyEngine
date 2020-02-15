@@ -407,7 +407,17 @@ VkSurfaceKHR VkSurface;
 VkPresentModeKHR PresentationMode;
 VkSurfaceCapabilitiesKHR SurfaceCapabilities;
 
-//-----------------------------------------------------
+//Swapchain
+VkImageUsageFlags SwchImageUsage;
+VkSurfaceTransformFlagBitsKHR SwchTransform;
+VkExtent2D SwchImageSize;
+VkImage* SwchImages;
+u32 SwchImageCount;
+VkColorSpaceKHR SwchImageColorSpace;
+VkFormat SwchImageFormat;
+VkSwapchainKHR VkSwapchains[10];
+
+//----------------------------------------------------_
 
 const char* GetVulkanResultString(VkResult result)
 {
@@ -464,9 +474,77 @@ const char* GetVulkanResultString(VkResult result)
 	}
 }
 
-b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const char** RequiredExtensions, void(SurfaceCallback(VkSurfaceKHR*)))
+void SetSizeOfSwapchainImages(u32 x, u32 y)
+{
+	SwchImageSize.width = x;
+	SwchImageSize.height = y;
+}
+
+void ClampSizeOfSwapchainImages(u32 x, u32 y)
+{
+	if( x < SurfaceCapabilities.minImageExtent.width )
+	{
+		SwchImageSize.width = SurfaceCapabilities.minImageExtent.width;
+	}
+	else if( x > SurfaceCapabilities.maxImageExtent.width )
+	{
+		SwchImageSize.width = SurfaceCapabilities.maxImageExtent.width;
+	}
+	if( y < SurfaceCapabilities.minImageExtent.height )
+	{
+		SwchImageSize.height = SurfaceCapabilities.minImageExtent.height;
+	}
+	else if( y > SurfaceCapabilities.maxImageExtent.height )
+	{
+		SwchImageSize.height = SurfaceCapabilities.maxImageExtent.height;
+	}
+}
+
+void CreateSwapchain(VkSwapchainKHR* Swapchain, VkSwapchainKHR* OldSwapchain)
+{
+	VkSwapchainCreateInfoKHR SwapchainCI;
+	SwapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	SwapchainCI.pNext = NULL;
+	SwapchainCI.flags = 0;
+	SwapchainCI.surface = VkSurface;
+	SwapchainCI.minImageCount = SwchImageCount;
+	SwapchainCI.imageFormat = SwchImageFormat;
+	SwapchainCI.imageColorSpace = SwchImageColorSpace;
+	SwapchainCI.imageExtent = SwchImageSize;
+	SwapchainCI.imageArrayLayers = 1;
+	SwapchainCI.imageUsage = SwchImageUsage;
+	SwapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	SwapchainCI.queueFamilyIndexCount = 0;
+	SwapchainCI.pQueueFamilyIndices = NULL;
+	SwapchainCI.preTransform = SwchTransform;
+	SwapchainCI.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	SwapchainCI.presentMode = PresentationMode;
+	SwapchainCI.clipped = VK_TRUE;
+	SwapchainCI.oldSwapchain = *OldSwapchain;
+
+	VK_CHECK(vkCreateSwapchainKHR(LogicalDevice, &SwapchainCI, NULL, Swapchain));
+	ASSERT(Swapchain, "vkCreateSwapchainKHR failed.");
+
+	if(OldSwapchain != VK_NULL_HANDLE)
+	{
+		vkDestroySwapchainKHR(LogicalDevice, *OldSwapchain, NULL);
+		OldSwapchain = VK_NULL_HANDLE;
+	}
+}
+
+b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)))
 {
 	u32 i;
+	const char *RequiredExtensions[] =
+	{
+		VK_KHR_SURFACE_EXTENSION_NAME,
+		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+#ifdef TINYENGINE_DEBUG
+		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
+#endif
+	};
+
+	ASSERT(SwchImageSize.width, "Please call SetSizeOfSwapchainImages before attemting init.");
 
 	if(!GetProcAddr || !SurfaceCallback)
 	{
@@ -491,26 +569,23 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, u32 ReqExCount, const cha
 	VkExtensionProperties InstanceExtensions[ExtensionCount];
 	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &ExtensionCount, &InstanceExtensions[0]));
 
-	for(u32 c = 0; c < ReqExCount; c++)
+	for(u32 c = 0; c < ArrayCount(RequiredExtensions); c++)
 	{
-		if(RequiredExtensions[c] != NULL)
+		for(i = 0; i<ExtensionCount; i++)
 		{
-			for(i = 0; i<ExtensionCount; i++)
+			if(strstr((char*)&InstanceExtensions[i], RequiredExtensions[c]))
 			{
-				if(strstr((char*)&InstanceExtensions[i], RequiredExtensions[c]))
-				{
-					Info("Using instance extension: %s ", RequiredExtensions[c]);
-					goto _continue;
-				}
+				Info("Using instance extension: %s ", RequiredExtensions[c]);
+				goto _continue;
 			}
-			Debug("Available Extensions: ");
-			for(i = 0; i<ExtensionCount; i++)
-			{
-				Debug("%s", (char*)&InstanceExtensions[i]);
-			}
-			Fatal("Extension %s  is not supported!", RequiredExtensions[c]);
-			return false;
 		}
+		Debug("Available Extensions: ");
+		for(i = 0; i<ExtensionCount; i++)
+		{
+			Debug("%s", (char*)&InstanceExtensions[i]);
+		}
+		Fatal("Extension %s  is not supported!", RequiredExtensions[c]);
+		return false;
 _continue:;
 	}
 
@@ -532,7 +607,7 @@ _continue:;
 	InstanceCI.pApplicationInfo = &AppI;
 	InstanceCI.enabledLayerCount = 0;
 	InstanceCI.ppEnabledLayerNames = NULL;
-	InstanceCI.enabledExtensionCount = ReqExCount;
+	InstanceCI.enabledExtensionCount = ArrayCount(RequiredExtensions);
 	InstanceCI.ppEnabledExtensionNames = &RequiredExtensions[0];
 
 
@@ -564,7 +639,7 @@ _continue:;
 	//(Kyryl): For what it takes, do not touch this code !
 	//C preprocessor is an evil thing!
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
-	for(i = 0; i<ReqExCount; i++) {				\
+	for(i = 0; i<ArrayCount(RequiredExtensions); i++) {				\
 		if( strstr(RequiredExtensions[i], extension) ) { \
 			name = (PFN_##name)vkGetInstanceProcAddr( Instance, #name );	\
 			if( name == NULL ){						\
@@ -617,7 +692,8 @@ _continue:;
 	}
 	ASSERT(GpuDevice, "Found no matching GpuDevice!");
 
-	//Surface created via platform layer callback.
+	//Surface 
+	//Is created via platform layer callback.
 	SurfaceCallback(&VkSurface); 
 
 	u32 ModesCount = 0;
@@ -640,6 +716,8 @@ _continue:;
 
 	//NOTE(Kyryl): This is necessary for swapchain resize.
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GpuDevice, VkSurface, &SurfaceCapabilities));
+	ClampSizeOfSwapchainImages(SwchImageSize.width, SwchImageSize.height);
+	//End Surface
 
 	//Vulkan Queue init. 
 	u32 QFamiliesCount;
@@ -716,6 +794,115 @@ __continue:;
 	DeviceCI.ppEnabledExtensionNames = &DeviceExtensions[0];
 	DeviceCI.pEnabledFeatures = &DeviceFeatures;
 	VK_CHECK(vkCreateDevice(GpuDevice, &DeviceCI, VkAllocators, &LogicalDevice));
+
+	//End LogicalDevice
+
+	// Load core Vulkan API device-level functions
+#define DEVICE_LEVEL_VULKAN_FUNCTION( name )				\
+	name = (PFN_##name)vkGetDeviceProcAddr( LogicalDevice, #name );	\
+	if( name == NULL ) {						\
+		Warn("Could not load device-level Vulkan function named: %s",#name); \
+		return false;							\
+	}else	{								\
+		Info("Loaded device-level function: %s",#name);} \
+
+#define TINY_VULKAN_UPDATE
+#include "tiny_vulkan.h"
+
+	// Load device-level functions from enabled extensions
+#define DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension )	\
+	for(i = 0; i<ArrayCount(DeviceExtensions); i++) {				\
+		if( strstr(DeviceExtensions[i], extension ) ) { \
+			name = (PFN_##name)vkGetDeviceProcAddr( LogicalDevice, #name );	\
+			if( name == NULL ) {						\
+				Warn("Could not load device-level Vulkan function from extension: %s", #name); \
+				return false;							\
+			}else{								\
+				Info("Loaded device-level function from extension: %s", #name);}	\
+		}									\
+	}
+
+#define TINY_VULKAN_UPDATE
+#include "tiny_vulkan.h"
+
+	vkGetDeviceQueue(LogicalDevice, QueueIndex[0], 0, &Queues[0]); //Graphics queue.
+	//End Vulkan Queue
+
+	//Swapchain
+	SwchImageCount = SurfaceCapabilities.maxImageCount + 1;
+
+	VkImageUsageFlags TmpImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	SwchImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	SwchImageUsage &= SurfaceCapabilities.supportedUsageFlags;
+	ASSERT(TmpImageUsage == SwchImageUsage, "Swapchain images do not support Color | Transfer attachments");
+
+	SwchTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	if(!SurfaceCapabilities.supportedTransforms & SwchTransform)
+	{
+		SwchTransform = SurfaceCapabilities.currentTransform;
+	}
+
+	// Enumerate supported swapchain image formats.
+	//NOTE(Kyryl): This is default cofig we are seaching for.
+	u32 FormatCount = 0;
+	VkSurfaceFormatKHR SurfaceFormat;
+	SurfaceFormat.format = VK_FORMAT_R8G8B8A8_UNORM;
+	SurfaceFormat.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(GpuDevice, VkSurface, &FormatCount, NULL));
+	ASSERT(FormatCount, "Failed to enumerate swapchain image formats.");
+
+	VkSurfaceFormatKHR SurfaceFormats[FormatCount];
+	VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(GpuDevice, VkSurface, &FormatCount, &SurfaceFormats[0]));
+
+	// Select surface format
+	if(FormatCount == 1 && SurfaceFormats[0].format == VK_FORMAT_UNDEFINED)
+	{
+		SwchImageFormat = SurfaceFormat.format;
+		SwchImageColorSpace = SurfaceFormat.colorSpace;
+		goto out;
+	}
+	else
+	{
+		for(i = 0; i<FormatCount; i++)
+		{
+			if(SurfaceFormat.format == SurfaceFormats[i].format && SurfaceFormat.colorSpace == SurfaceFormats[i].colorSpace)
+			{
+				SwchImageFormat = SurfaceFormat.format;
+				SwchImageColorSpace = SurfaceFormat.colorSpace;
+				goto out;
+			}
+		}
+
+		for(i = 0; i<FormatCount; i++)
+		{
+			if( (SurfaceFormat.format == SurfaceFormats[i].format) )
+			{
+				SwchImageFormat = SurfaceFormat.format;
+				SwchImageColorSpace = SurfaceFormats[i].colorSpace;
+				Warn("Combination of format and colorspace is not supported. Selecting other colorspace.");
+				goto out;
+			}
+		}
+	}
+	SwchImageFormat = SurfaceFormats[0].format;
+	SwchImageColorSpace = SurfaceFormats[0].colorSpace;
+	Warn("Surface format is not supported. Selecting available format - colorspace combination." );
+out:;
+
+    	CreateSwapchain(&VkSwapchains[0], &VkSwapchains[1]);
+
+	//Swapchain Images, required for rendering.
+	//They are treated as special an unique.
+	uint32_t ImageCount = 0;
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
+	ASSERT(ImageCount, "Failed to get swapchain image count.");
+
+	SwchImages = (VkImage*) malloc(sizeof(VkImage) * ImageCount);
+
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &SwchImages[0]));
+
+	//End Swapchain
 
 	return true;
 

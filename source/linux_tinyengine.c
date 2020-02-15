@@ -66,6 +66,7 @@ int main(int argc, char** argv)
 	 */
 	Wnd.Width = 640;
 	Wnd.Height = 640;
+	SetSizeOfSwapchainImages(Wnd.Width, Wnd.Height);
 	Wnd.Window = XCreateWindow(Wnd.Display, XRootWindow(Wnd.Display, Wnd.Screen),
 			0, 0, Wnd.Width, Wnd.Height,
 			0, Wnd.Depth, InputOutput,
@@ -73,18 +74,9 @@ int main(int argc, char** argv)
 			Wnd.ValueMask, &Wnd.Attr);
 
 
-	static const char *extensions[] =
-	{
-		VK_KHR_SURFACE_EXTENSION_NAME,
-		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#ifdef TINYENGINE_DEBUG
-		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-#endif
-	};
-
 	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_DEEPBIND);
 	PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
-	if(!InitVulkan(&ProcAddr, ArrayCount(extensions), extensions, SurfaceCallback))
+	if(!InitVulkan(&ProcAddr, SurfaceCallback))
 	{
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);
