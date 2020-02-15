@@ -247,6 +247,14 @@ typedef struct tiny_event
     };
 } tiny_event;
 
+typedef struct tiny_digital_button
+{
+    b32 Pressed;
+    b32 Released;
+    b32 Up;
+    b32 Down;
+} tiny_digital_button;
+
 typedef struct tiny_platform_audio
 {
     u32 ChannelCount;

@@ -1154,18 +1154,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
                             
-                            Tiny_Update(Global_Platform);
+                            Tiny_Update(&Global_Platform);
                             Tiny_Render();
-
-                            // TODO(hayden): Clearing the event queue just happens here for now (for testing purposes) -- Move to engine!!
-                            // TODO(hayden): This should set everything to TINY_EVENT_NO_INPUT
-                            for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
-                            {
-                                tiny_event NoEvent = {TINY_EVENT_NO_INPUT};
-                                NoEvent.Mouse.Button = TINY_EVENT_NO_INPUT;
-                                Global_Platform.EventQueue[ClearIndex] = NoEvent;
-                            }
-                            Global_Platform.EventQueueIndex = 0;
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }
