@@ -450,9 +450,12 @@ VkPipeline VkPipelines[NUM_PIPELINES];
 VkPipelineLayout VkPipelineLayouts[NUM_PIPELINE_LAYOUTS];
 VkCommandPool VkCommandPools[NUM_COMMAND_POOLS];
 VkCommandBuffer VkCommandBuffers[NUM_COMMAND_BUFFERS];
+
+//DEPTH
 VkImage DepthBuffer;
 VkImageView DepthBufferView;
 VkDeviceMemory DepthBufferMemory;
+VkFormat DepthFormat;
 
 //MEMORY
 #define NUM_MAXALLOC_VBO 100
@@ -678,8 +681,7 @@ void CreateDepthBuffer()
 		DestroyDepthBuffer();
 	}
 
-	//TODO(Kyryl): check if this is supported before attempting.
-	DepthBuffer = Create2DImage(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, SwchImageSize.width, SwchImageSize.height);
+	DepthBuffer = Create2DImage(DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, SwchImageSize.width, SwchImageSize.height);
 
 	VkMemoryRequirements MemoryRequirements;
 	vkGetImageMemoryRequirements(LogicalDevice, DepthBuffer, &MemoryRequirements);
@@ -691,8 +693,8 @@ void CreateDepthBuffer()
 	DedicatedAI.buffer = VK_NULL_HANDLE;
 
 	VkMemoryAllocateInfo MemoryAI;
-	memset(&MemoryAI, 0, sizeof(MemoryAI));
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	MemoryAI.pNext = NULL;
 	MemoryAI.allocationSize = MemoryRequirements.size;
 	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
 
@@ -700,17 +702,21 @@ void CreateDepthBuffer()
 	VK_CHECK(vkBindImageMemory(LogicalDevice, DepthBuffer, DepthBufferMemory, 0));
 
 	VkImageViewCreateInfo DepthBufferImageViewCI;
-	memset(&DepthBufferImageViewCI, 0, sizeof(DepthBufferImageViewCI));
 	DepthBufferImageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	DepthBufferImageViewCI.format = VK_FORMAT_D32_SFLOAT;
+	DepthBufferImageViewCI.pNext = NULL;
+	DepthBufferImageViewCI.flags = 0;
 	DepthBufferImageViewCI.image = DepthBuffer;
+	DepthBufferImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	DepthBufferImageViewCI.format = VK_FORMAT_D32_SFLOAT;
+	DepthBufferImageViewCI.components.r = 0; 
+	DepthBufferImageViewCI.components.g = 0; 
+	DepthBufferImageViewCI.components.b = 0; 
+	DepthBufferImageViewCI.components.a = 0; 
 	DepthBufferImageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	DepthBufferImageViewCI.subresourceRange.baseMipLevel = 0;
 	DepthBufferImageViewCI.subresourceRange.levelCount = 1;
 	DepthBufferImageViewCI.subresourceRange.baseArrayLayer = 0;
 	DepthBufferImageViewCI.subresourceRange.layerCount = 1;
-	DepthBufferImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	DepthBufferImageViewCI.flags = 0;
 
 	VK_CHECK(vkCreateImageView(LogicalDevice, &DepthBufferImageViewCI, NULL, &DepthBufferView));
 }
@@ -1335,6 +1341,41 @@ out:;
 	VK_CHECK(vkAllocateCommandBuffers(LogicalDevice, &CommandBufferAI, &VkCommandBuffers[0]));
 
 
+	//MEMORY
+	Trace("Reached target: Memory Init");
+	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
+
+	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
+	VertexBuffers[0].Offset = 0;
+	//Note(Kyryl): vertex buffers require no alignment.
+	ZInitZone(VertexBuffers[0].Data, 20480, 1, 0);
+	//End MEMORY
+
+	//DEPTH BUFFER
+
+	// Find depth format
+	VkFormatProperties FormatProperties;
+	vkGetPhysicalDeviceFormatProperties(GpuDevice, VK_FORMAT_X8_D24_UNORM_PACK32, &FormatProperties);
+	b32 x8_d24_support = (FormatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+	vkGetPhysicalDeviceFormatProperties(GpuDevice, VK_FORMAT_D32_SFLOAT, &FormatProperties);
+	b32 d32_support = (FormatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0;
+
+	DepthFormat = VK_FORMAT_D16_UNORM;
+	if (x8_d24_support)
+	{
+		Trace("Using X8_D24 depth buffer format");
+		DepthFormat = VK_FORMAT_X8_D24_UNORM_PACK32;
+	}
+	else if(d32_support)
+	{
+		Trace("Using D32 depth buffer format");
+		DepthFormat = VK_FORMAT_D32_SFLOAT;
+	}
+
+	CreateDepthBuffer();
+
+	//End DEPTH BUFFER
+
 	//Renderpass
 	VkAttachmentDescription Attachments[2];
 	Attachments[0].flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
@@ -1349,7 +1390,7 @@ out:;
 
 	Attachments[1].flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
 	Attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-	Attachments[1].format = VK_FORMAT_D32_SFLOAT;
+	Attachments[1].format = DepthFormat;
 	Attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	Attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	Attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -1390,17 +1431,8 @@ out:;
 
 	VK_CHECK(vkCreateRenderPass(LogicalDevice, &RenderPassCI, 0, &VkRenderPasses[0]));
 
-	//MEMORY
-	Trace("Reached target: Memory Init");
-	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
 
-	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
-	VertexBuffers[0].Offset = 0;
-	//Note(Kyryl): vertex buffers require no alignment.
-	ZInitZone(VertexBuffers[0].Data, 20480, 1, 0);
-	//End MEMORY
 
-	CreateDepthBuffer();
 	//End RENDER RESOURCES
 
 	return true;
