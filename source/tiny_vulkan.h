@@ -341,7 +341,10 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
+//FORWARD DECLARATIONS
 const char *GetVulkanResultString(VkResult result);
+s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
+//--------------------
 
 #ifdef TINYENGINE_DEBUG
 #   define ASSERT(condition, message, ...) \
@@ -421,6 +424,7 @@ u32 SwchImageCount;
 VkColorSpaceKHR SwchImageColorSpace;
 VkFormat SwchImageFormat;
 VkSwapchainKHR VkSwapchains[10];
+VkImageView* SwchImageViews;
 
 //RENDERING RESOURCES
 /*
@@ -446,6 +450,9 @@ VkPipeline VkPipelines[NUM_PIPELINES];
 VkPipelineLayout VkPipelineLayouts[NUM_PIPELINE_LAYOUTS];
 VkCommandPool VkCommandPools[NUM_COMMAND_POOLS];
 VkCommandBuffer VkCommandBuffers[NUM_COMMAND_BUFFERS];
+VkImage DepthBuffer;
+VkImageView DepthBufferView;
+VkDeviceMemory DepthBufferMemory;
 
 //MEMORY
 #define NUM_MAXALLOC_VBO 100
@@ -462,7 +469,36 @@ typedef struct vbo_t
 	void *Data;
 }vbo_t;
 vbo_t VertexBuffers[NUM_VBO_BUFFERS];
-//----------------------------------------------------
+
+//INTERNAL SEGMENTED MEMORY MANAGER
+#define	ZONEID	0x1d4a11
+#define MINFRAGMENT	64
+
+typedef struct memblock_s
+{
+	s32 Size;	// including the header and possibly tiny fragments
+	s32 Tag;	// a tag of 0 is a free block
+#ifdef TINYENGINE_DEBUG
+	s32 Id;		// should be ZONEID
+#endif
+	struct memblock_s *Next, *Prev;
+} memblock_t;
+
+typedef struct
+{
+	s32 Size;		// total bytes malloced, including header
+	s32 Align;
+	memblock_t Blocklist;	// start / end cap for linked list
+	memblock_t *Rover;
+} memzone_t;
+
+memzone_t *Mainzone[3];
+int Zsizes[3];
+//------------------------------SGM
+
+//--------------------------------------MEMORY
+
+//----------------------------------------------------VULKAN GLOBALS
 
 const char *GetVulkanResultString(VkResult result)
 {
@@ -577,6 +613,108 @@ void CreateSwapchain(VkSwapchainKHR *Swapchain, VkSwapchainKHR *OldSwapchain)
 	}
 }
 
+void CreateSwapchainImageViews()
+{
+	//Swapchain ImageViews objects.
+	VkImageViewCreateInfo SwchImageViewCI;
+	SwchImageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	SwchImageViewCI.pNext = NULL;
+	SwchImageViewCI.flags = 0;
+	SwchImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	SwchImageViewCI.format = SwchImageFormat;
+	SwchImageViewCI.components.r = VK_COMPONENT_SWIZZLE_R;
+	SwchImageViewCI.components.g = VK_COMPONENT_SWIZZLE_G;
+	SwchImageViewCI.components.b = VK_COMPONENT_SWIZZLE_B;
+	SwchImageViewCI.components.a = VK_COMPONENT_SWIZZLE_A;
+	SwchImageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	SwchImageViewCI.subresourceRange.baseMipLevel = 0;
+	SwchImageViewCI.subresourceRange.levelCount = 1;
+	SwchImageViewCI.subresourceRange.baseArrayLayer = 0;
+	SwchImageViewCI.subresourceRange.layerCount = 1;
+
+	for(u32 i = 0; i<SwchImageCount; i++)
+	{
+		SwchImageViewCI.image = SwchImages[i];
+		VK_CHECK(vkCreateImageView(LogicalDevice, &SwchImageViewCI, 0, &SwchImageViews[i]));
+	}
+}
+
+VkImage Create2DImage(VkFormat format, VkImageUsageFlags usage, int w, int h)
+{
+	VkImage Img;
+	VkImageCreateInfo ImageCI;
+	memset(&ImageCI, 0, sizeof(ImageCI));
+	ImageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	ImageCI.imageType = VK_IMAGE_TYPE_2D;
+	ImageCI.format = format;
+	ImageCI.extent.width = w;
+	ImageCI.extent.height = h;
+	ImageCI.extent.depth = 1;
+	ImageCI.mipLevels = 1;
+	ImageCI.arrayLayers = 1;
+	ImageCI.samples = VK_SAMPLE_COUNT_1_BIT;
+	ImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
+	ImageCI.usage = usage;
+	ImageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	ImageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	VK_CHECK(vkCreateImage(LogicalDevice, &ImageCI, NULL, &Img));
+	return Img;
+}
+
+void DestroyDepthBuffer()
+{
+	vkDestroyImage(LogicalDevice, DepthBuffer, NULL);
+	vkFreeMemory(LogicalDevice, DepthBufferMemory, NULL);
+	vkDestroyImageView(LogicalDevice, DepthBufferView, NULL);
+}
+
+void CreateDepthBuffer()
+{
+	Trace("Creating depth buffer");
+
+	if(DepthBuffer)
+	{
+		DestroyDepthBuffer();
+	}
+
+	//TODO(Kyryl): check if this is supported before attempting.
+	DepthBuffer = Create2DImage(VK_FORMAT_D32_SFLOAT, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, SwchImageSize.width, SwchImageSize.height);
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetImageMemoryRequirements(LogicalDevice, DepthBuffer, &MemoryRequirements);
+
+	VkMemoryDedicatedAllocateInfoKHR DedicatedAI;
+	DedicatedAI.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR;
+	DedicatedAI.pNext = NULL;
+	DedicatedAI.image = DepthBuffer;
+	DedicatedAI.buffer = VK_NULL_HANDLE;
+
+	VkMemoryAllocateInfo MemoryAI;
+	memset(&MemoryAI, 0, sizeof(MemoryAI));
+	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	MemoryAI.allocationSize = MemoryRequirements.size;
+	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+
+	VK_CHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, NULL, &DepthBufferMemory));
+	VK_CHECK(vkBindImageMemory(LogicalDevice, DepthBuffer, DepthBufferMemory, 0));
+
+	VkImageViewCreateInfo DepthBufferImageViewCI;
+	memset(&DepthBufferImageViewCI, 0, sizeof(DepthBufferImageViewCI));
+	DepthBufferImageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	DepthBufferImageViewCI.format = VK_FORMAT_D32_SFLOAT;
+	DepthBufferImageViewCI.image = DepthBuffer;
+	DepthBufferImageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	DepthBufferImageViewCI.subresourceRange.baseMipLevel = 0;
+	DepthBufferImageViewCI.subresourceRange.levelCount = 1;
+	DepthBufferImageViewCI.subresourceRange.baseArrayLayer = 0;
+	DepthBufferImageViewCI.subresourceRange.layerCount = 1;
+	DepthBufferImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	DepthBufferImageViewCI.flags = 0;
+
+	VK_CHECK(vkCreateImageView(LogicalDevice, &DepthBufferImageViewCI, NULL, &DepthBufferView));
+}
+
 s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask)
 {
 	u32 current_type_bits = type_bits;
@@ -616,9 +754,13 @@ void *VboMalloc(int size, VkBuffer *buffer)
 
 	VkBufferCreateInfo BufferCI;
 	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferCI.pNext = NULL;
+	BufferCI.flags = 0;
 	BufferCI.size = size;
 	BufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-
+	BufferCI.sharingMode = 0;
+	BufferCI.queueFamilyIndexCount = 0;
+	BufferCI.pQueueFamilyIndices = NULL;
 
 	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, buffer), "vkCreateBuffer failed!");
 
@@ -632,6 +774,7 @@ void *VboMalloc(int size, VkBuffer *buffer)
 
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	MemoryAI.pNext = NULL;
 	MemoryAI.allocationSize = AlignedSize;
 	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 
@@ -645,6 +788,142 @@ void *VboMalloc(int size, VkBuffer *buffer)
 	VboAllocCount++;
 	return data;
 }
+
+void *ZMalloc(s32 Size, u8 Zoneid)
+{
+	s32 Extra;
+	memblock_t *Start, *Rover, *Newblock, *Base;
+
+//
+// scan through the block list looking for the first free block
+// of sufficient size
+//
+	Size += sizeof(memblock_t);	// account for size of block header
+#ifdef TINYENGINE_DEBUG
+	Size += sizeof(s32);		// space for memory trash tester
+#endif
+	Size = (Size + (Mainzone[Zoneid]->Align-1)) & -Mainzone[Zoneid]->Align;
+	//alignment must be consistent through out the allocator.
+
+	Base = Rover = Mainzone[Zoneid]->Rover;
+	Start = Base->Prev;
+
+	do
+	{
+		if (Rover == Start)	// scaned all the way around the list
+			return NULL;
+		if (Rover->Tag)
+			Base = Rover = Rover->Next;
+		else
+			Rover = Rover->Next;
+	}
+	while (Base->Tag || Base->Size < Size);
+
+//
+// found a block big enough
+//
+	Extra = Base->Size - Size;
+	if (Extra > MINFRAGMENT)
+	{
+		// there will be a free fragment after the allocated block
+		Newblock = (memblock_t *) ((unsigned char *)Base + Size );
+		Newblock->Size = Extra;
+		Newblock->Tag = 0;			// free block
+		Newblock->Prev = Base;
+#ifdef TINYENGINE_DEBUG		
+		Newblock->Id = ZONEID;
+#endif		
+		Newblock->Next = Base->Next;
+		Newblock->Next->Prev = Newblock;
+		Base->Next = Newblock;
+		Base->Size = Size;
+	}
+
+	Base->Tag = 1;				// no longer a free block
+
+	Mainzone[Zoneid]->Rover = Base->Next;	// next allocation will start looking here
+	
+#ifdef TINYENGINE_DEBUG
+	// marker for memory trash testing
+	Base->Id = ZONEID;
+	*(int *)((unsigned char *)Base + Base->Size - sizeof(s32)) = ZONEID;
+#endif
+
+	return (void *) ((unsigned char *)Base + sizeof(memblock_t));
+}
+
+void ZFree(void *Ptr, u8 Zoneid)
+{
+	memblock_t *Block, *Other;
+	
+	if (!Ptr)
+	{
+		return;
+	}
+
+	Block = (memblock_t *) ( (unsigned char *)Ptr - sizeof(memblock_t));
+#ifdef TINYENGINE_DEBUG
+	if (Block->Id != ZONEID)
+	{
+		Warn("ZFree: freed a pointer without ZONEID");
+	}
+	if (Block->Tag == 0)
+	{
+		Warn("ZFree: freed a freed pointer zoneid: %d", Zoneid);
+	}
+#endif
+	Block->Tag = 0;	// mark as free
+
+	Other = Block->Prev;
+	if (!Other->Tag)
+	{
+		// merge with previous free block
+		Other->Size += Block->Size;
+		Other->Next = Block->Next;
+		Other->Next->Prev = Other;
+		if (Block == Mainzone[Zoneid]->Rover)
+			Mainzone[Zoneid]->Rover = Other;
+		Block = Other;
+	}
+
+	Other = Block->Next;
+	if (!Other->Tag)
+	{
+		// merge the next free block onto the end
+		Block->Size += Other->Size;
+		Block->Next = Other->Next;
+		Block->Next->Prev = Block;
+		if (Other == Mainzone[Zoneid]->Rover)
+			Mainzone[Zoneid]->Rover = Block;
+	}
+}
+
+void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
+{
+	memblock_t *Block;
+
+	memzone_t *Zone = (memzone_t*)Mem;
+	Mainzone[Zoneid] = Zone;
+	Zone->Align = Align;
+// set the entire zone to one free block
+
+	Zone->Blocklist.Next = Zone->Blocklist.Prev = Block =
+	                           (memblock_t *)( (unsigned char *)Zone + sizeof(memzone_t) );
+	Zone->Blocklist.Tag = 1; // in use block
+#ifdef TINYENGINE_DEBUG
+	Zone->Blocklist.Id = 0;
+#endif	
+	Zone->Blocklist.Size = 0;
+	Zone->Rover = Block;
+
+	Block->Prev = Block->Next = &Zone->Blocklist;
+	Block->Tag = 0;	// free block
+#ifdef TINYENGINE_DEBUG
+	Block->Id = ZONEID;
+#endif	
+	Block->Size = Size - sizeof(memzone_t);
+}
+
 
 b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)), u32 ReqExCount, const char **RequiredExtensions)
 {
@@ -716,15 +995,15 @@ _continue:;
 
 
 	//define custom vulkan allocators
-	//allocators = nullptr;
+	//allocators = NULL;
 	if(VkAllocators)
 	{
-		//allocators->pUserData = nullptr;
+		//allocators->pUserData = NULL;
 		//allocators->pfnAllocation =
 		//allocators->pfnReallocation =
 		//allocators->pfnFree =
-		//allocators->pfnInternalAllocation = nullptr;
-		//allocators->pfnInternalFree = nullptr;
+		//allocators->pfnInternalAllocation = NULL;
+		//allocators->pfnInternalFree = NULL;
 	}
 	VK_CHECK(vkCreateInstance(&InstanceCI, VkAllocators, &Instance));
 
@@ -935,11 +1214,12 @@ __continue:;
 
 	//Swapchain
 	SwchImageCount = SurfaceCapabilities.maxImageCount + 1;
+	SwchImageViews = (VkImageView*) malloc(sizeof(VkImageView) * SwchImageCount);
 
 	VkImageUsageFlags TmpImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	SwchImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	SwchImageUsage &= SurfaceCapabilities.supportedUsageFlags;
-	ASSERT(TmpImageUsage == SwchImageUsage, "Swapchain images do not support Color | Transfer attachments");
+	ASSERT(TmpImageUsage == SwchImageUsage, "Swapchain images do not support Color | Transfer Attachments");
 
 	SwchTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	if(!SurfaceCapabilities.supportedTransforms & SwchTransform)
@@ -1007,6 +1287,8 @@ out:;
 
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &SwchImages[0]));
 
+	CreateSwapchainImageViews();
+
 	//End Swapchain
 
 	//RENDER RESOURCES
@@ -1053,13 +1335,72 @@ out:;
 	VK_CHECK(vkAllocateCommandBuffers(LogicalDevice, &CommandBufferAI, &VkCommandBuffers[0]));
 
 
+	//Renderpass
+	VkAttachmentDescription Attachments[2];
+	Attachments[0].flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
+	Attachments[0].format = SwchImageFormat;
+	Attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+	Attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	Attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	Attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	Attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	Attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	Attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	Attachments[1].flags = VK_ATTACHMENT_DESCRIPTION_MAY_ALIAS_BIT;
+	Attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+	Attachments[1].format = VK_FORMAT_D32_SFLOAT;
+	Attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	Attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	Attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	Attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	Attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	Attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference colorAttachment;
+	colorAttachment.attachment = 0;
+	colorAttachment.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference depthAttachment;
+	depthAttachment.attachment = 1;
+	depthAttachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkSubpassDescription Subpass[1];
+	Subpass[0].flags = 0;
+	Subpass[0].pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	Subpass[0].inputAttachmentCount = 0;
+	Subpass[0].pInputAttachments = NULL;
+	Subpass[0].colorAttachmentCount = 1;
+	Subpass[0].pColorAttachments = &colorAttachment;
+	Subpass[0].pResolveAttachments = NULL;
+	Subpass[0].pDepthStencilAttachment = &depthAttachment;
+	Subpass[0].preserveAttachmentCount = 0;
+	Subpass[0].pPreserveAttachments = NULL;
+
+	VkRenderPassCreateInfo RenderPassCI;
+	RenderPassCI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	RenderPassCI.pNext = NULL;
+	RenderPassCI.flags = 0;
+	RenderPassCI.attachmentCount = 2;
+	RenderPassCI.pAttachments = Attachments;
+	RenderPassCI.subpassCount = 1;
+	RenderPassCI.pSubpasses = &Subpass[0];
+	RenderPassCI.dependencyCount = 0;
+	RenderPassCI.pDependencies = NULL;
+
+	VK_CHECK(vkCreateRenderPass(LogicalDevice, &RenderPassCI, 0, &VkRenderPasses[0]));
+
 	//MEMORY
 	Trace("Reached target: Memory Init");
 	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
 
 	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
 	VertexBuffers[0].Offset = 0;
+	//Note(Kyryl): vertex buffers require no alignment.
+	ZInitZone(VertexBuffers[0].Data, 20480, 1, 0);
+	//End MEMORY
 
+	CreateDepthBuffer();
 	//End RENDER RESOURCES
 
 	return true;
