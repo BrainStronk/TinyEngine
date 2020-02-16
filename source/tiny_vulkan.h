@@ -707,7 +707,7 @@ void CreateDepthBuffer()
 	DepthBufferImageViewCI.flags = 0;
 	DepthBufferImageViewCI.image = DepthBuffer;
 	DepthBufferImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	DepthBufferImageViewCI.format = VK_FORMAT_D32_SFLOAT;
+	DepthBufferImageViewCI.format = DepthFormat;
 	DepthBufferImageViewCI.components.r = 0; 
 	DepthBufferImageViewCI.components.g = 0; 
 	DepthBufferImageViewCI.components.b = 0; 
