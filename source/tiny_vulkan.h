@@ -496,7 +496,6 @@ typedef struct
 } memzone_t;
 
 memzone_t *Mainzone[3];
-int Zsizes[3];
 //------------------------------SGM
 
 //--------------------------------------MEMORY
@@ -646,8 +645,9 @@ VkImage Create2DImage(VkFormat format, VkImageUsageFlags usage, int w, int h)
 {
 	VkImage Img;
 	VkImageCreateInfo ImageCI;
-	memset(&ImageCI, 0, sizeof(ImageCI));
 	ImageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	ImageCI.pNext = NULL;
+	ImageCI.flags = 0;
 	ImageCI.imageType = VK_IMAGE_TYPE_2D;
 	ImageCI.format = format;
 	ImageCI.extent.width = w;
@@ -659,6 +659,8 @@ VkImage Create2DImage(VkFormat format, VkImageUsageFlags usage, int w, int h)
 	ImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
 	ImageCI.usage = usage;
 	ImageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	ImageCI.queueFamilyIndexCount = 0;
+	ImageCI.pQueueFamilyIndices = NULL;
 	ImageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 	VK_CHECK(vkCreateImage(LogicalDevice, &ImageCI, NULL, &Img));
