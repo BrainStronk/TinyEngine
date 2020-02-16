@@ -341,7 +341,7 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
-const char* GetVulkanResultString(VkResult result);
+const char *GetVulkanResultString(VkResult result);
 
 #ifdef TINYENGINE_DEBUG
 #   define ASSERT(condition, message, ...) \
@@ -377,6 +377,11 @@ const char* GetVulkanResultString(VkResult result);
 		ASSERT(call == VK_SUCCESS,"VK_CHECK: %s", GetVulkanResultString(call));\
 	} while (false)
 
+#define VK_MCHECK(call, message)\
+	do {\
+		ASSERT(call == VK_SUCCESS,"VK_MCHECK: %s | %s", GetVulkanResultString(call), message);\
+	} while (false)
+
 #else
 #define ASSERT(condition, message, ...)
 #define VK_CHECK(call)
@@ -385,20 +390,20 @@ const char* GetVulkanResultString(VkResult result);
 //VULKAN GLOBALS
 //-----------------------------------------------------
 VkAllocationCallbacks Allocator;
-VkAllocationCallbacks* VkAllocators = NULL;//&Allocator;
+VkAllocationCallbacks *VkAllocators = NULL;//&Allocator;
 VkInstance Instance;
 
 //Gpu init:
 VkDevice LogicalDevice;
 VkPhysicalDevice GpuDevice;
-VkExtensionProperties* DeviceExtensionProperties;
+VkExtensionProperties *DeviceExtensionProperties;
 u32 DeviceExtPropCount;
 VkPhysicalDeviceProperties DeviceProperties;
 VkPhysicalDeviceFeatures DeviceFeatures;
 
 //Gpu Queues
 #define NUM_QUEUES 1
-VkQueue Queues[NUM_QUEUES];
+VkQueue VkQueues[NUM_QUEUES];
 u32 QueueIndex[NUM_QUEUES];
 float QueuePriority[NUM_QUEUES];
 
@@ -411,15 +416,55 @@ VkSurfaceCapabilitiesKHR SurfaceCapabilities;
 VkImageUsageFlags SwchImageUsage;
 VkSurfaceTransformFlagBitsKHR SwchTransform;
 VkExtent2D SwchImageSize;
-VkImage* SwchImages;
+VkImage *SwchImages;
 u32 SwchImageCount;
 VkColorSpaceKHR SwchImageColorSpace;
 VkFormat SwchImageFormat;
 VkSwapchainKHR VkSwapchains[10];
 
-//----------------------------------------------------_
+//RENDERING RESOURCES
+/*
+Objects are in unified arrays instead of
+separate varibles, manage with indexing carefully.
+*/
+#define NUM_SEMAPHORES 10
+#define NUM_FENCES 10
+#define NUM_RENDERPASSES 10
+#define NUM_FRAMEBUFFERS 10
+#define NUM_IMAGEVIEWS 100
+#define NUM_PIPELINES 20
+#define NUM_PIPELINE_LAYOUTS 20
+#define NUM_COMMAND_POOLS 10
+#define NUM_COMMAND_BUFFERS 10
+//----------------------------------------------------
+VkSemaphore VkSemaphores[NUM_SEMAPHORES];
+VkFence VkFences[NUM_FENCES];
+VkRenderPass VkRenderPasses[NUM_RENDERPASSES];
+VkFramebuffer VkFramebuffers[NUM_FRAMEBUFFERS];
+VkImageView VkImageViews[NUM_IMAGEVIEWS];
+VkPipeline VkPipelines[NUM_PIPELINES];
+VkPipelineLayout VkPipelineLayouts[NUM_PIPELINE_LAYOUTS];
+VkCommandPool VkCommandPools[NUM_COMMAND_POOLS];
+VkCommandBuffer VkCommandBuffers[NUM_COMMAND_BUFFERS];
 
-const char* GetVulkanResultString(VkResult result)
+//MEMORY
+#define NUM_MAXALLOC_VBO 100
+#define NUM_VBO_BUFFERS 10
+//----------------------------------------------------
+VkPhysicalDeviceMemoryProperties DeviceMemoryProperties;
+
+u32 VboAllocCount;
+VkDeviceMemory VboDeviceMemory[NUM_MAXALLOC_VBO];
+typedef struct vbo_t
+{
+	VkBuffer Buffer;
+	u32 Offset;
+	void *Data;
+}vbo_t;
+vbo_t VertexBuffers[NUM_VBO_BUFFERS];
+//----------------------------------------------------
+
+const char *GetVulkanResultString(VkResult result)
 {
 	switch (result)
 	{
@@ -500,7 +545,7 @@ void ClampSizeOfSwapchainImages(u32 x, u32 y)
 	}
 }
 
-void CreateSwapchain(VkSwapchainKHR* Swapchain, VkSwapchainKHR* OldSwapchain)
+void CreateSwapchain(VkSwapchainKHR *Swapchain, VkSwapchainKHR *OldSwapchain)
 {
 	VkSwapchainCreateInfoKHR SwapchainCI;
 	SwapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -532,21 +577,80 @@ void CreateSwapchain(VkSwapchainKHR* Swapchain, VkSwapchainKHR* OldSwapchain)
 	}
 }
 
-b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)))
+s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask)
+{
+	u32 current_type_bits = type_bits;
+	u32 i;
+
+	for (i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+	{
+		if ((current_type_bits & 1) == 1)
+		{
+			if ((DeviceMemoryProperties.memoryTypes[i].propertyFlags & (requirements_mask | preferred_mask)) == (requirements_mask | preferred_mask))
+				return i;
+		}
+		current_type_bits >>= 1;
+	}
+
+	current_type_bits = type_bits;
+	for (i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+	{
+		if ((current_type_bits & 1) == 1)
+		{
+			if ((DeviceMemoryProperties.memoryTypes[i].propertyFlags & requirements_mask) == requirements_mask)
+				return i;
+		}
+		current_type_bits >>= 1;
+	}
+
+	Fatal("Could not find memory type");
+	return 0;
+}
+
+//NOTE(Kyryl):
+//There will be one huge buffer, so in theory this function
+//should be called only once, but may be used in case of scarcity
+void *VboMalloc(int size, VkBuffer *buffer)
+{
+	ASSERT(VboAllocCount < NUM_MAXALLOC_VBO, "VBO MAXALLOC");
+
+	VkBufferCreateInfo BufferCI;
+	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferCI.size = size;
+	BufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+
+
+	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, buffer), "vkCreateBuffer failed!");
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetBufferMemoryRequirements(LogicalDevice, *buffer, &MemoryRequirements);
+
+	s32 AlignMod = MemoryRequirements.size % MemoryRequirements.alignment;
+	s32 AlignedSize = ((MemoryRequirements.size % MemoryRequirements.alignment) == 0)
+	                         ? MemoryRequirements.size
+	                         : (MemoryRequirements.size + MemoryRequirements.alignment - AlignMod);
+
+	VkMemoryAllocateInfo MemoryAI;
+	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	MemoryAI.allocationSize = AlignedSize;
+	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
+	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &VboDeviceMemory[VboAllocCount]), "vkAllocateMemory failed!");
+
+	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *buffer, VboDeviceMemory[VboAllocCount], AlignedSize), "vkBindBufferMemory failed!");
+
+	void *data;
+	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &data),"vkMapMemory failed!");
+
+	VboAllocCount++;
+	return data;
+}
+
+b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)), u32 ReqExCount, const char **RequiredExtensions)
 {
 	u32 i;
-	const char *RequiredExtensions[] =
-	{
-		VK_KHR_SURFACE_EXTENSION_NAME,
-		VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
-#ifdef TINYENGINE_DEBUG
-		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-#endif
-	};
 
-	ASSERT(SwchImageSize.width, "Please call SetSizeOfSwapchainImages before attemting init.");
-
-	if(!GetProcAddr || !SurfaceCallback)
+	if(!GetProcAddr || !SurfaceCallback || !RequiredExtensions || !ReqExCount)
 	{
 		return false;
 	}
@@ -569,7 +673,7 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr* GetProcAddr, void(SurfaceCallback(VkSu
 	VkExtensionProperties InstanceExtensions[ExtensionCount];
 	VK_CHECK(vkEnumerateInstanceExtensionProperties(NULL, &ExtensionCount, &InstanceExtensions[0]));
 
-	for(u32 c = 0; c < ArrayCount(RequiredExtensions); c++)
+	for(u32 c = 0; c < ReqExCount; c++)
 	{
 		for(i = 0; i<ExtensionCount; i++)
 		{
@@ -607,7 +711,7 @@ _continue:;
 	InstanceCI.pApplicationInfo = &AppI;
 	InstanceCI.enabledLayerCount = 0;
 	InstanceCI.ppEnabledLayerNames = NULL;
-	InstanceCI.enabledExtensionCount = ArrayCount(RequiredExtensions);
+	InstanceCI.enabledExtensionCount = ReqExCount;
 	InstanceCI.ppEnabledExtensionNames = &RequiredExtensions[0];
 
 
@@ -639,7 +743,7 @@ _continue:;
 	//(Kyryl): For what it takes, do not touch this code !
 	//C preprocessor is an evil thing!
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) \
-	for(i = 0; i<ArrayCount(RequiredExtensions); i++) {				\
+	for(i = 0; i<ReqExCount; i++) {				\
 		if( strstr(RequiredExtensions[i], extension) ) { \
 			name = (PFN_##name)vkGetInstanceProcAddr( Instance, #name );	\
 			if( name == NULL ){						\
@@ -679,7 +783,7 @@ _continue:;
 		else
 		{
 			//Found a Gpu
-			int size = (sizeof(VkExtensionProperties) * DeviceExtensionCount);
+			int size = (sizeof(VkExtensionProperties)  *DeviceExtensionCount);
 			DeviceExtensionProperties = (VkExtensionProperties*) malloc(size);
 			memcpy(DeviceExtensionProperties, ExtensionProperties, size);
 			DeviceExtPropCount = DeviceExtensionCount;
@@ -695,6 +799,7 @@ _continue:;
 	//Surface 
 	//Is created via platform layer callback.
 	SurfaceCallback(&VkSurface); 
+	ASSERT(SwchImageSize.width, "Please call SetSizeOfSwapchainImages in SurfaceCallback before attempting init.");
 
 	u32 ModesCount = 0;
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(GpuDevice, VkSurface, &ModesCount, NULL));
@@ -750,7 +855,7 @@ _continue:;
 	//The reason it's named like this is because we can derive multiple of these 
 	//objects from single GpuDevice. Probably the most used object in Vulkan.
 
-	const char* DeviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+	const char *DeviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 	for(int c = 0; c < ArrayCount(DeviceExtensions); c++)
 	{
 		for(i = 0; i < DeviceExtPropCount; i++)
@@ -825,7 +930,7 @@ __continue:;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
-	vkGetDeviceQueue(LogicalDevice, QueueIndex[0], 0, &Queues[0]); //Graphics queue.
+	vkGetDeviceQueue(LogicalDevice, QueueIndex[0], 0, &VkQueues[0]); //Graphics queue.
 	//End Vulkan Queue
 
 	//Swapchain
@@ -904,8 +1009,60 @@ out:;
 
 	//End Swapchain
 
-	return true;
+	//RENDER RESOURCES
+	VkSemaphoreCreateInfo SemaphoreCI;
+	SemaphoreCI.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	SemaphoreCI.pNext = NULL;
+	SemaphoreCI.flags = 0;
 
+	VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkSemaphores[0]));
+	VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkSemaphores[1]));
+
+	VkFenceCreateInfo FenceCI;
+	FenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	FenceCI.pNext = NULL;
+	FenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	VK_CHECK(vkCreateFence(LogicalDevice, &FenceCI, VkAllocators, &VkFences[0]));
+	VK_CHECK(vkCreateFence(LogicalDevice, &FenceCI, VkAllocators, &VkFences[1]));
+
+
+	//NOTE(Kyryl): We can have 1 command pool and many buffers
+	//or command pool for every command buffer. 
+	//I will make command pool for every buffer in case of future multithreading.
+	VkCommandPoolCreateInfo CommandPoolCI;
+	CommandPoolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	CommandPoolCI.pNext = NULL;
+	CommandPoolCI.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	CommandPoolCI.queueFamilyIndex = QueueIndex[0]; //graphics queue.
+
+	//NOTE(Kyryl): they are all on graphics queue currently
+	//If we need compute queue explicitly then make separate VkComputeCommandPools
+	for(i = 0; i<NUM_COMMAND_POOLS; i++)
+	{
+		VK_CHECK(vkCreateCommandPool(LogicalDevice, &CommandPoolCI, VkAllocators, &VkCommandPools[i]));
+	}
+
+	//Very basic setup. VkCommandBuffers holds only primary buffers.
+	VkCommandBufferAllocateInfo CommandBufferAI;
+	CommandBufferAI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	CommandBufferAI.pNext = NULL;
+	CommandBufferAI.commandPool = VkCommandPools[0];
+	CommandBufferAI.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	CommandBufferAI.commandBufferCount = NUM_COMMAND_BUFFERS;
+	VK_CHECK(vkAllocateCommandBuffers(LogicalDevice, &CommandBufferAI, &VkCommandBuffers[0]));
+
+
+	//MEMORY
+	Trace("Reached target: Memory Init");
+	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
+
+	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
+	VertexBuffers[0].Offset = 0;
+
+	//End RENDER RESOURCES
+
+	return true;
 
 }
 
