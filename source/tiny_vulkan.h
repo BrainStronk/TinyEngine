@@ -393,7 +393,7 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 //VULKAN GLOBALS
 //-----------------------------------------------------
 VkAllocationCallbacks Allocator;
-VkAllocationCallbacks *VkAllocators = NULL;//&Allocator;
+VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
 
 //Gpu init:
@@ -936,6 +936,50 @@ void ZFree(void *Ptr, u8 Zoneid)
 	}
 }
 
+void *ZRealloc(void *Ptr, int Size, uint8_t Zoneid)
+{
+	int OldSize;
+	void *OldPtr;
+	memblock_t *Block;
+
+	if (!Ptr)
+	{
+		return ZMalloc (Size, Zoneid);
+	}
+	Block = (memblock_t *) ((unsigned char *) Ptr - sizeof (memblock_t));
+	
+#ifdef TINYENGINE_DEBUG
+	if (Block->Id != ZONEID)
+	{
+		Warn("ZFree: freed a pointer without ZONEID");
+	}
+	if (Block->Tag == 0)
+	{
+		Warn("ZFree: freed a freed pointer zoneid: %d", Zoneid);
+	}
+#endif
+	OldSize = Block->Size;
+	
+#ifdef TINYENGINE_DEBUG	
+	OldSize -= sizeof(int); /* see ZMalloc() */
+#endif	
+	OldSize -= ((int)sizeof(memblock_t));	
+	OldPtr = Ptr;
+
+	ZFree (Ptr, Zoneid);
+	Ptr = ZMalloc (Size, Zoneid);
+	if (!Ptr)
+	{
+		Fatal("ZRealloc: failed on allocation of %i bytes", Size);
+	}
+	if (Ptr != OldPtr)
+		memmove (Ptr, OldPtr, min(OldSize, Size));
+	if (OldSize < Size)
+		memset((unsigned char *)Ptr + OldSize, 0, Size - OldSize);
+
+	return Ptr;
+}
+
 void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
 {
 	memblock_t *Block;
@@ -960,6 +1004,26 @@ void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
 	Block->Id = ZONEID;
 #endif	
 	Block->Size = Size - sizeof(memzone_t);
+}
+
+void *VkAlloc(void *pusd, size_t size, size_t align, VkSystemAllocationScope allocationScope)
+{
+	void* p = ZMalloc(size, 0);
+	ASSERT(p,"VkAlloc failed.");
+	return p;
+}
+
+void *VkRealloc(void* pusd, void* porg, size_t size, size_t align, VkSystemAllocationScope allocationScope)
+{
+	void* p = ZRealloc(porg, size, 0);
+	ASSERT(p,"VkRealloc failed.");
+	return p;
+}
+
+void VkFree(void *pusd, void *ptr)
+{
+	ZFree(ptr, 0);
+	return;
 }
 
 void LoadShader(const char* Path)
@@ -1241,12 +1305,14 @@ _continue:;
 	//allocators = NULL;
 	if(VkAllocators)
 	{
-		//allocators->pUserData = NULL;
-		//allocators->pfnAllocation =
-		//allocators->pfnReallocation =
-		//allocators->pfnFree =
-		//allocators->pfnInternalAllocation = NULL;
-		//allocators->pfnInternalFree = NULL;
+		void *VkMemory = malloc(8000000); //8MB
+		ZInitZone(VkMemory, 8000000, 8, 0);
+		VkAllocators->pUserData = NULL;
+		VkAllocators->pfnAllocation = VkAlloc;
+		VkAllocators->pfnReallocation = VkRealloc;
+		VkAllocators->pfnFree = VkFree;
+		VkAllocators->pfnInternalAllocation = NULL;
+		VkAllocators->pfnInternalFree = NULL;
 	}
 	VK_CHECK(vkCreateInstance(&InstanceCI, VkAllocators, &Instance));
 
@@ -1585,7 +1651,7 @@ out:;
 	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
 	VertexBuffers[0].Offset = 0;
 	//Note(Kyryl): vertex buffers require no alignment.
-	ZInitZone(VertexBuffers[0].Data, 20480, 1, 0);
+	ZInitZone(VertexBuffers[0].Data, 20480, 1, 1);
 	//End MEMORY
 
 	//DEPTH BUFFER

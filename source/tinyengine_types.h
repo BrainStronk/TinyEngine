@@ -25,4 +25,7 @@ typedef float f64;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+#define	min(a, b)(((a) < (b)) ? (a) : (b))
+#define	max(a, b)(((a) > (b)) ? (a) : (b))
+
 #endif // TINYENGINE_TYPES_H
