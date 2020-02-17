@@ -396,6 +396,7 @@ void PostInit();
 VkAllocationCallbacks Allocator;
 VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
+VkDebugReportCallbackEXT VkDebugCallback;
 
 //Gpu init:
 VkDevice LogicalDevice;
@@ -1245,6 +1246,86 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 	return;
 }
 
+
+#ifdef TINYENGINE_DEBUG
+
+VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
+{
+	// This silences warnings like "For optimal performance image layout should be VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL instead of GENERAL."
+	// We'll assume other performance warnings are also not useful.
+	if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT)
+		return VK_FALSE;
+
+	const char* type =
+	    (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)
+	    ? "ERROR"
+	    : (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT)
+	    ? "WARNING"
+	    : "INFO";
+
+	char message[4096];
+	stbsp_sprintf(message, "%s: %s\n", type, pMessage);
+
+	Fatal("%s", message);
+
+	if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT)
+		Info("Validation error encountered!");
+
+	if(flags & VK_DEBUG_REPORT_WARNING_BIT_EXT)
+		return VK_FALSE;
+
+
+	ASSERT(0,"");
+	return VK_FALSE;
+}
+
+b32 CheckValidationLayerSupport(const char** debugLayers, s32 ReqCount)
+{
+	u32 layerCount;
+	vkEnumerateInstanceLayerProperties(&layerCount, NULL);
+
+	VkLayerProperties availableLayers[layerCount];
+	vkEnumerateInstanceLayerProperties(&layerCount, &availableLayers[0]);
+
+	for(s32 i = 0; i<ReqCount; i++)
+	{
+		b32 layerFound = false;
+		for (u32 z = 0; z<layerCount; z++)
+		{
+			if (strcmp(debugLayers[i], (char*) &availableLayers[z]) == 0)
+			{
+				layerFound = true;
+				break;
+			}
+		}
+		if (!layerFound)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void RegisterDebugCallback()
+{
+	if(vkCreateDebugReportCallbackEXT)
+	{
+		VkDebugReportCallbackCreateInfoEXT createInfo;
+		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+		createInfo.pNext = NULL;
+		createInfo.flags = VK_DEBUG_REPORT_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
+			VK_DEBUG_REPORT_ERROR_BIT_EXT;
+		createInfo.pfnCallback = debugReportCallback;
+		createInfo.pUserData = NULL;
+
+		VK_CHECK(vkCreateDebugReportCallbackEXT(Instance, &createInfo, 0, &VkDebugCallback));
+	}
+}
+
+#endif
+
+
 b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)), u32 ReqExCount, const char **RequiredExtensions)
 {
 	u32 i;
@@ -1313,6 +1394,22 @@ _continue:;
 	InstanceCI.enabledExtensionCount = ReqExCount;
 	InstanceCI.ppEnabledExtensionNames = &RequiredExtensions[0];
 
+#ifdef TINYENGINE_DEBUG
+	const char* DebugLayers[] =
+	{
+		"VK_LAYER_KHRONOS_validation"
+	};
+	if(!CheckValidationLayerSupport(DebugLayers, ArrayCount(DebugLayers)))
+	{
+		Warn("Debug Layers are not found! ");
+	}
+	else
+	{
+		InstanceCI.enabledLayerCount = ArrayCount(DebugLayers);
+		InstanceCI.ppEnabledLayerNames = DebugLayers;
+	}
+#endif
+
 
 	//define custom vulkan allocators
 	//allocators = NULL;
@@ -1328,6 +1425,7 @@ _continue:;
 		VkAllocators->pfnInternalFree = NULL;
 	}
 	VK_CHECK(vkCreateInstance(&InstanceCI, VkAllocators, &Instance));
+
 
 	#define INSTANCE_LEVEL_VULKAN_FUNCTION( name )				\
     	name = (PFN_##name) (vkGetInstanceProcAddr(Instance, #name));	\
@@ -1356,6 +1454,10 @@ _continue:;
 	}  
 	#define TINY_VULKAN_UPDATE
 	#include "tiny_vulkan.h"
+
+#ifdef TINYENGINE_DEBUG
+	RegisterDebugCallback();
+#endif
 
 	u32 DeviceCount = 0;
 	VK_CHECK(vkEnumeratePhysicalDevices(Instance, &DeviceCount, NULL));
@@ -1857,6 +1959,7 @@ wait:
 	case VK_SUCCESS:
 		break;
 	case VK_SUBOPTIMAL_KHR:
+		Info("VkBeginRendering: VK_SUBOPTIMAL_KHR");
 		break;
 	case VK_TIMEOUT:
 		Info("VK_TIMEOUT");

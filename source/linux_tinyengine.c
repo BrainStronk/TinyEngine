@@ -34,14 +34,17 @@ void SurfaceCallback(VkSurfaceKHR* Surface)
 {
 	SetSizeOfSwapchainImages(Wnd.Width, Wnd.Height);
 
-	VkXlibSurfaceCreateInfoKHR SurfaceCI;
-	SurfaceCI.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
-	SurfaceCI.pNext = NULL;
-	SurfaceCI.flags = 0;
-	SurfaceCI.dpy = Wnd.Display;
-	SurfaceCI.window = Wnd.Window;
+	if(Surface)
+	{
+		VkXlibSurfaceCreateInfoKHR SurfaceCI;
+		SurfaceCI.sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR;
+		SurfaceCI.pNext = NULL;
+		SurfaceCI.flags = 0;
+		SurfaceCI.dpy = Wnd.Display;
+		SurfaceCI.window = Wnd.Window;
 
-	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
+		VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
+	}
 }
 
 int main(int argc, char** argv)
