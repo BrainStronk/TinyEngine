@@ -393,6 +393,7 @@ void PostInit();
 
 //VULKAN GLOBALS
 //-----------------------------------------------------
+void (*VkSurfaceCallback)(VkSurfaceKHR*); //The only interface with outside world.
 VkAllocationCallbacks Allocator;
 VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
@@ -462,6 +463,8 @@ VkFormat DepthFormat;
 //MEMORY
 #define NUM_MAXALLOC_VBO 100
 #define NUM_VBO_BUFFERS 10
+#define NUM_MAXALLOC_IBO 100
+#define NUM_IBO_BUFFERS 10
 //----------------------------------------------------
 VkPhysicalDeviceMemoryProperties DeviceMemoryProperties;
 
@@ -474,6 +477,16 @@ typedef struct vbo_t
 	void *Data;
 }vbo_t;
 vbo_t VertexBuffers[NUM_VBO_BUFFERS];
+
+u32 IboAllocCount;
+VkDeviceMemory IboDeviceMemory[NUM_MAXALLOC_IBO];
+typedef struct ibo_t
+{
+	VkBuffer Buffer;
+	u32 Offset;
+	void *Data;
+}ibo_t;
+ibo_t IndexBuffers[NUM_IBO_BUFFERS];
 
 //INTERNAL SEGMENTED MEMORY MANAGER
 #define	ZONEID	0x1d4a11
@@ -502,14 +515,6 @@ memzone_t *Mainzone[3];
 
 //--------------------------------------MEMORY
 
-//SHADERS
-#define NUM_SHADERS 20
-//--------------------
-VkShaderModule VkShaderModules[NUM_SHADERS];
-VkPipelineCache PipelineCache; //TODO
-u32 ShaderCount;
-//------------------SHADERS
-
 //POST INIT
 VkClearValue ClearColor[2];
 VkClearColorValue ColorValue;
@@ -521,6 +526,24 @@ VkPresentInfoKHR PresentInfo;
 u32 ImageIndex;
 VkPipelineStageFlags PipelineStageFlags;
 //POST INIT
+
+//SHADERS
+#define NUM_SHADERS 20
+//--------------------
+VkShaderModule VkShaderModules[NUM_SHADERS];
+VkPipelineCache PipelineCache; //TODO
+u32 ShaderCount;
+//------------------SHADERS
+
+//SHADER RESOURCES
+typedef struct
+{
+	float pos[3];   // = vec3
+	float tex_coord[2]; // = vec2
+	float color[3]; // = vec3
+} Vertex;
+//SHADER RESOURCES
+
 
 //----------------------------------------------------VULKAN GLOBALS
 
@@ -838,6 +861,47 @@ void *VboMalloc(u32 Size, VkBuffer *Buffer)
 	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
 
 	VboAllocCount++;
+	return Data;
+}
+
+void *IboMalloc(u32 Size, VkBuffer *Buffer)
+{
+	ASSERT(VboAllocCount < NUM_MAXALLOC_IBO, "IBO MAXALLOC");
+
+	VkBufferCreateInfo BufferCI;
+	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	BufferCI.pNext = NULL;
+	BufferCI.flags = 0;
+	BufferCI.size = Size;
+	BufferCI.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
+	BufferCI.sharingMode = 0;
+	BufferCI.queueFamilyIndexCount = 0;
+	BufferCI.pQueueFamilyIndices = NULL;
+
+	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, Buffer), "vkCreateBuffer failed!");
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetBufferMemoryRequirements(LogicalDevice, *Buffer, &MemoryRequirements);
+
+	s32 AlignMod = MemoryRequirements.size % MemoryRequirements.alignment;
+	s32 AlignedSize = ((MemoryRequirements.size % MemoryRequirements.alignment) == 0)
+	                         ? MemoryRequirements.size
+	                         : (MemoryRequirements.size + MemoryRequirements.alignment - AlignMod);
+
+	VkMemoryAllocateInfo MemoryAI;
+	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	MemoryAI.pNext = NULL;
+	MemoryAI.allocationSize = AlignedSize;
+	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
+	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &VboDeviceMemory[VboAllocCount]), "vkAllocateMemory failed!");
+
+	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *Buffer, VboDeviceMemory[VboAllocCount], 0), "vkBindBufferMemory failed!");
+
+	void *Data;
+	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
+
+	IboAllocCount++;
 	return Data;
 }
 
@@ -1186,13 +1250,6 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 	PipelineDynamicStateCI.dynamicStateCount = ArrayCount(DynamicStates);
 	PipelineDynamicStateCI.pDynamicStates = DynamicStates;
 
-	typedef struct
-	{
-		float pos[3];   // = vec3
-		float tex_coord[2]; // = vec2
-		float color[3]; // = vec3
-	} Vertex;
-
 	VkVertexInputBindingDescription VertexInputBD[1]; 
 	VertexInputBD[0].binding = 0;
 	VertexInputBD[0].stride = sizeof(Vertex);
@@ -1249,7 +1306,7 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 
 #ifdef TINYENGINE_DEBUG
 
-VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, uint64_t object, size_t location, int32_t messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
+VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, u64 object, size_t location, s32 messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
 {
 	// This silences warnings like "For optimal performance image layout should be VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL instead of GENERAL."
 	// We'll assume other performance warnings are also not useful.
@@ -1325,6 +1382,46 @@ void RegisterDebugCallback()
 
 #endif
 
+void RebuildRenderer()
+{
+	u32 i;
+	VK_CHECK(vkDeviceWaitIdle(LogicalDevice));
+
+	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GpuDevice, VkSurface, &SurfaceCapabilities));
+	ClampSizeOfSwapchainImages(SwchImageSize.width, SwchImageSize.height);
+
+	if(SwchImageSize.width == 0 || SwchImageSize.height == 0)
+	{
+		return; //if window is minimized.
+	}
+
+    	CreateSwapchain(&VkSwapchains[0], &VkSwapchains[1]);
+
+	u32 ImageCount = 0;
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
+	ASSERT(ImageCount, "Failed to get swapchain image count.");
+
+	ASSERT(SwchImages, "Swapchain images unallocated.");
+
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &SwchImages[0]));
+
+	//Delete incompatible objects.
+	for(i = 0; i<SwchImageCount; i++)
+	{
+		vkDestroyImageView(LogicalDevice, SwchImageViews[i], NULL);
+	}
+
+	CreateSwapchainImageViews();
+
+	for(i = 0; i < SwchImageCount; i++)
+	{
+		vkDestroyFramebuffer(LogicalDevice, VkFramebuffers[i], NULL);
+	}
+
+	CreateDepthBuffer();
+	CreateSwchFrameBuffers();
+
+}
 
 b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)), u32 ReqExCount, const char **RequiredExtensions)
 {
@@ -1335,6 +1432,7 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSu
 		return false;
 	}
 	vkGetInstanceProcAddr = *GetProcAddr;
+	VkSurfaceCallback = SurfaceCallback;
 
 	#define GLOBAL_LEVEL_VULKAN_FUNCTION( name )				\
     	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
@@ -1709,7 +1807,7 @@ out:;
 
 	//Swapchain Images, required for rendering.
 	//They are treated as special an unique.
-	uint32_t ImageCount = 0;
+	u32 ImageCount = 0;
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
 	ASSERT(ImageCount, "Failed to get swapchain image count.");
 
@@ -1773,6 +1871,12 @@ out:;
 	VertexBuffers[0].Offset = 0;
 	//Note(Kyryl): vertex buffers require no alignment.
 	ZInitZone(VertexBuffers[0].Data, 20480, 1, 1);
+
+	IndexBuffers[0].Data = IboMalloc(20480, &IndexBuffers[0].Buffer);
+	IndexBuffers[0].Offset = 0;
+	// Align to 4 bytes because we allocate both uint16 and uint32
+	// index buffers and alignment must match index size
+	ZInitZone(IndexBuffers[0].Data, 20480, 4, 2);
 	//End MEMORY
 
 	//DEPTH BUFFER
@@ -1972,6 +2076,8 @@ wait:
 		goto wait;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		Info("VkBeginRendering: VK_ERROR_OUT_OF_DATE_KHR");
+		VkSurfaceCallback(NULL);
+		RebuildRenderer();
 		goto wait;
 	default:
 		VK_CHECK(result);
@@ -1987,6 +2093,8 @@ wait:
 	VK_MCHECK(vkBeginCommandBuffer(VkCommandBuffers[0], &CommandBufferBI),"vkBeginCommandBuffer failed!");
 
 	VkRect2D RenderArea;
+	RenderArea.offset.x = 0;
+	RenderArea.offset.y = 0;
 	RenderArea.extent.width = SwchImageSize.width;
 	RenderArea.extent.height = SwchImageSize.height;
 
@@ -1999,12 +2107,23 @@ wait:
 	RenderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	RenderPassBI.pNext = NULL;
 	RenderPassBI.renderPass = VkRenderPasses[0];
-	RenderPassBI.framebuffer = VkFramebuffers[0];
+	RenderPassBI.framebuffer = VkFramebuffers[ImageIndex];
 	RenderPassBI.renderArea = RenderArea;
 	RenderPassBI.clearValueCount = 2;
 	RenderPassBI.pClearValues = ClearColor;
 
 	vkCmdBeginRenderPass(VkCommandBuffers[0], &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
+
+	VkViewport Viewport;
+	Viewport.x = 0;
+	Viewport.y = 0;
+	Viewport.width = SwchImageSize.width;
+	Viewport.width = SwchImageSize.height;
+	Viewport.minDepth = 0;
+	Viewport.maxDepth = 1;
+
+	vkCmdSetViewport(VkCommandBuffers[0], 0, 1, &Viewport);
+	vkCmdSetScissor(VkCommandBuffers[0], 0, 1, &RenderArea);
 }
 
 void VkEndRendering()
@@ -2029,12 +2148,34 @@ void VkEndRendering()
 		return;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		Info("VkEndRendering: VK_ERROR_OUT_OF_DATE_KHR");
-		return; //TODO(URGENT/CRITICAL)(Kyryl): Handle this.
+		VkSurfaceCallback(NULL);
+		RebuildRenderer();
+		return; 
 	default:
 		VK_CHECK(result);
 		return;
 	}
 
+}
+
+void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer)
+{
+	unsigned char *Verts = (unsigned char*) ZMalloc(VertexCount*sizeof(Vertex), 1);	
+	unsigned char *Index = (unsigned char*) ZMalloc(IndexCount*sizeof(u32), 2);	
+	memcpy(Verts, &VertexBuffer[0], VertexCount*sizeof(Vertex));
+	memcpy(Index, &IndexBuffer[0], IndexCount*sizeof(u32));
+	vkCmdBindVertexBuffers(VkCommandBuffers[0], 0, 1, &VertexBuffers[0].Buffer, (VkDeviceSize*)&VertexBuffers[0].Offset);
+	vkCmdBindIndexBuffer(VkCommandBuffers[0], IndexBuffers[0].Buffer, (VkDeviceSize)IndexBuffers[0].Offset, VK_INDEX_TYPE_UINT32);
+	vkCmdBindPipeline(VkCommandBuffers[0], VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
+	vkCmdDrawIndexed(VkCommandBuffers[0], IndexCount, 1, 0, 0, 0);
+
+	//TODO(Kyryl):
+	//Compute these offsets correctly, currently this does not work.
+
+	VertexBuffers[0].Offset += VertexCount*sizeof(Vertex);
+	IndexBuffers[0].Offset += IndexCount*sizeof(u32);
+	ZFree(Verts, 1);
+	ZFree(Index, 2);
 }
 
 #endif
