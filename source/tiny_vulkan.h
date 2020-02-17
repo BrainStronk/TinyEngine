@@ -1959,7 +1959,7 @@ void VkBeginRendering()
 
 	//tell hardware to not wait more than 1 second.
 wait:
-	result = vkAcquireNextImageKHR(LogicalDevice, VkSwapchains[0], 1000000000, VkSemaphores[0], VkFences[0], &ImageIndex);
+	result = vkAcquireNextImageKHR(LogicalDevice, VkSwapchains[0], 1000000000, VkSemaphores[0], VK_NULL_HANDLE, &ImageIndex);
 	switch( result )
 	{
 	case VK_SUCCESS:
