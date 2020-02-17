@@ -500,6 +500,14 @@ memzone_t *Mainzone[3];
 
 //--------------------------------------MEMORY
 
+//SHADERS
+#define NUM_SHADERS 20
+//--------------------
+VkShaderModule VkShaderModules[NUM_SHADERS];
+VkPipelineCache PipelineCache; //TODO
+u32 ShaderCount;
+//------------------SHADERS
+
 //----------------------------------------------------VULKAN GLOBALS
 
 const char *GetVulkanResultString(VkResult result)
@@ -638,6 +646,28 @@ void CreateSwapchainImageViews()
 	{
 		SwchImageViewCI.image = SwchImages[i];
 		VK_CHECK(vkCreateImageView(LogicalDevice, &SwchImageViewCI, 0, &SwchImageViews[i]));
+	}
+}
+
+void CreateSwchFrameBuffers()
+{
+	VkFramebufferCreateInfo FramebufferCI;
+	FramebufferCI.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	FramebufferCI.pNext = NULL;
+	FramebufferCI.flags = 0;
+	FramebufferCI.renderPass = VkRenderPasses[0];
+	FramebufferCI.attachmentCount = 0;
+	FramebufferCI.pAttachments = NULL;
+	FramebufferCI.width = SwchImageSize.width;
+	FramebufferCI.height = SwchImageSize.height;
+	FramebufferCI.layers = 1;
+
+	FramebufferCI.attachmentCount = 2;
+	for(u32 i = 0; i < SwchImageCount; i++)
+	{
+		VkImageView Attachments[] = { SwchImageViews[i], DepthBufferView };
+		FramebufferCI.pAttachments = Attachments;
+		VK_CHECK(vkCreateFramebuffer(LogicalDevice, &FramebufferCI, 0, &VkFramebuffers[i]));
 	}
 }
 
@@ -932,6 +962,211 @@ void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
 	Block->Size = Size - sizeof(memzone_t);
 }
 
+void LoadShader(const char* Path)
+{
+	ASSERT(ShaderCount < NUM_SHADERS, "Out of shader modules, Increase NUM_SHADERS");
+
+	FILE* File = fopen(Path, "rb");
+	ASSERT(File, "Shader file: %s not found!", Path);
+
+	fseek(File, 0, SEEK_END);
+	s32 Length = ftell(File);
+	ASSERT(Length >= 0, "Empty File.");
+	fseek(File, 0, SEEK_SET);
+
+	char *Buffer[Length];
+	ASSERT(Buffer,"");
+
+	u32 rc = fread(Buffer, 1, Length, File);
+	ASSERT(rc == (u32)Length, "Failed to read");
+	fclose(File);
+
+	VkShaderModuleCreateInfo ShaderModuleCI;
+	ShaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	ShaderModuleCI.pNext = NULL;
+	ShaderModuleCI.flags = 0;
+	ShaderModuleCI.codeSize = Length;
+	ShaderModuleCI.pCode = (const uint32_t*)(Buffer);
+
+	VK_CHECK(vkCreateShaderModule(LogicalDevice, &ShaderModuleCI, 0, &VkShaderModules[ShaderCount]));
+	ShaderCount++;
+}
+
+void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
+{
+	VkShaderModule vs = VkShaderModules[0];
+	VkShaderModule fs = VkShaderModules[1];
+
+	ASSERT(vs, "Failed to load Vertex Shader.");
+	ASSERT(fs, "Failed to load Fragment Shader.");
+
+	VkPipelineShaderStageCreateInfo ShaderStageCI[2];
+	ShaderStageCI[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[0].pNext = NULL;
+	ShaderStageCI[0].flags = 0;
+	ShaderStageCI[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	ShaderStageCI[0].module = vs;
+	ShaderStageCI[0].pName = "main";
+	ShaderStageCI[0].pSpecializationInfo = NULL;
+	ShaderStageCI[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[1].pNext = NULL;
+	ShaderStageCI[1].flags = 0;
+	ShaderStageCI[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	ShaderStageCI[1].module = fs;
+	ShaderStageCI[1].pName = "main";
+	ShaderStageCI[1].pSpecializationInfo = NULL;
+
+	VkPipelineInputAssemblyStateCreateInfo InputAssemblyCI;
+	InputAssemblyCI.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	InputAssemblyCI.pNext = NULL;
+	InputAssemblyCI.flags = 0;
+	InputAssemblyCI.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	InputAssemblyCI.primitiveRestartEnable = VK_FALSE;
+
+	VkPipelineViewportStateCreateInfo ViewportState;
+	ViewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	ViewportState.pNext = NULL;
+	ViewportState.flags = 0;
+	ViewportState.viewportCount = 1;
+	ViewportState.pViewports = NULL;
+	ViewportState.scissorCount = 1;
+	ViewportState.pScissors = NULL;
+
+	VkPipelineRasterizationStateCreateInfo RasterizationStateCI;
+	RasterizationStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	RasterizationStateCI.pNext = NULL;
+	RasterizationStateCI.flags = 0;
+	RasterizationStateCI.depthClampEnable = VK_FALSE;
+	RasterizationStateCI.rasterizerDiscardEnable = VK_FALSE;
+	RasterizationStateCI.polygonMode = PolygonMode;
+	RasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
+	RasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	RasterizationStateCI.depthBiasEnable = VK_FALSE;
+	RasterizationStateCI.depthBiasConstantFactor = 0.0f;
+	RasterizationStateCI.depthBiasClamp = 0.0f;
+	RasterizationStateCI.depthBiasSlopeFactor = 0.0f;
+	RasterizationStateCI.lineWidth = 1.0f;
+
+	VkPipelineMultisampleStateCreateInfo MultisampleStateCI;
+	MultisampleStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	MultisampleStateCI.pNext = NULL;
+	MultisampleStateCI.flags = 0;
+	MultisampleStateCI.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	MultisampleStateCI.sampleShadingEnable = VK_FALSE;
+	MultisampleStateCI.minSampleShading = 0.0f;
+	MultisampleStateCI.pSampleMask = NULL;
+	MultisampleStateCI.alphaToCoverageEnable = VK_FALSE;
+	MultisampleStateCI.alphaToOneEnable = VK_FALSE;
+
+	VkPipelineDepthStencilStateCreateInfo DepthStensilStateCI;
+	DepthStensilStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	DepthStensilStateCI.pNext = NULL;
+	DepthStensilStateCI.flags = 0;
+
+	VkPipelineColorBlendAttachmentState ColorBlendAttachment;
+	ColorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+	VkPipelineColorBlendStateCreateInfo ColorBlendStateCI;
+	ColorBlendStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	ColorBlendStateCI.pNext = NULL;
+	ColorBlendStateCI.flags = 0;
+	ColorBlendStateCI.attachmentCount = 1;
+	ColorBlendStateCI.pAttachments = &ColorBlendAttachment;
+	ColorBlendStateCI.logicOpEnable = VK_FALSE;
+	ColorBlendStateCI.logicOp = VK_LOGIC_OP_COPY;
+	ColorBlendStateCI.attachmentCount = 1;
+	ColorBlendStateCI.blendConstants[0] = 1.0f;
+	ColorBlendStateCI.blendConstants[1] = 1.0f;
+	ColorBlendStateCI.blendConstants[2] = 1.0f;
+	ColorBlendStateCI.blendConstants[3] = 1.0f;
+
+	VkStencilOpState sos = {0};
+	DepthStensilStateCI.depthTestEnable = VK_TRUE;
+	DepthStensilStateCI.depthWriteEnable = VK_TRUE;
+	DepthStensilStateCI.depthCompareOp = VK_COMPARE_OP_LESS;
+	DepthStensilStateCI.depthBoundsTestEnable = VK_FALSE;
+	DepthStensilStateCI.stencilTestEnable = VK_FALSE;
+	DepthStensilStateCI.front = sos;
+	DepthStensilStateCI.back = sos;
+	DepthStensilStateCI.minDepthBounds = 0.0f;
+	DepthStensilStateCI.maxDepthBounds = 0.0f;
+
+	ColorBlendAttachment.blendEnable = VK_FALSE;
+	ColorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	ColorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	ColorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	ColorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+	ColorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	ColorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	VkDynamicState DynamicStates[] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+
+	VkPipelineDynamicStateCreateInfo PipelineDynamicStateCI;
+	PipelineDynamicStateCI.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	PipelineDynamicStateCI.pNext = NULL;
+	PipelineDynamicStateCI.flags = 0;
+	PipelineDynamicStateCI.dynamicStateCount = ArrayCount(DynamicStates);
+	PipelineDynamicStateCI.pDynamicStates = DynamicStates;
+
+	typedef struct
+	{
+		float pos[3];   // = vec3
+		float tex_coord[2]; // = vec2
+		float color[3]; // = vec3
+	} Vertex;
+
+	VkVertexInputBindingDescription VertexInputBD[1]; 
+	VertexInputBD[0].binding = 0;
+	VertexInputBD[0].stride = sizeof(Vertex);
+	VertexInputBD[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+	VkVertexInputAttributeDescription VertexInputAD[3];
+	VertexInputAD[0].binding = 0;
+	VertexInputAD[0].location = 0;
+	VertexInputAD[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+	VertexInputAD[0].offset = offsetof(Vertex, pos);
+	VertexInputAD[1].binding = 0;
+	VertexInputAD[1].location = 1;
+	VertexInputAD[1].format = VK_FORMAT_R32G32_SFLOAT;
+	VertexInputAD[1].offset = offsetof(Vertex, tex_coord);
+	VertexInputAD[2].binding = 0;
+	VertexInputAD[2].location = 2;
+	VertexInputAD[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+	VertexInputAD[2].offset = offsetof(Vertex, color);
+
+	VkPipelineVertexInputStateCreateInfo VertexInputStateCI[1];
+	VertexInputStateCI[0].sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	VertexInputStateCI[0].pNext = NULL;
+	VertexInputStateCI[0].flags = 0;
+	VertexInputStateCI[0].vertexBindingDescriptionCount = 1;
+	VertexInputStateCI[0].vertexAttributeDescriptionCount = 3;
+	VertexInputStateCI[0].pVertexBindingDescriptions = VertexInputBD;
+	VertexInputStateCI[0].pVertexAttributeDescriptions = &VertexInputAD[0];
+
+	VkGraphicsPipelineCreateInfo PipelineCI;
+	PipelineCI.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	PipelineCI.pNext = NULL;
+	PipelineCI.flags = 0;
+	PipelineCI.stageCount = ArrayCount(ShaderStageCI);
+	PipelineCI.pStages = ShaderStageCI;
+	PipelineCI.pVertexInputState = &VertexInputStateCI[0];
+	PipelineCI.pInputAssemblyState = &InputAssemblyCI;
+	PipelineCI.pTessellationState = NULL;
+	PipelineCI.pViewportState = &ViewportState;
+	PipelineCI.pRasterizationState = &RasterizationStateCI;
+	PipelineCI.pMultisampleState = &MultisampleStateCI;
+	PipelineCI.pDepthStencilState = &DepthStensilStateCI;
+	PipelineCI.pColorBlendState = &ColorBlendStateCI;
+	PipelineCI.pDynamicState = &PipelineDynamicStateCI;
+	PipelineCI.layout = VkPipelineLayouts[0];
+	PipelineCI.renderPass = VkRenderPasses[0];
+	PipelineCI.subpass = 0;
+	PipelineCI.basePipelineHandle = 0;
+	PipelineCI.basePipelineIndex = 0;
+
+	VK_CHECK(vkCreateGraphicsPipelines(LogicalDevice, PipelineCache, 1, &PipelineCI, 0, &VkPipelines[0]));
+	return;
+}
 
 b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSurfaceKHR*)), u32 ReqExCount, const char **RequiredExtensions)
 {
@@ -1433,9 +1668,37 @@ out:;
 
 	VK_CHECK(vkCreateRenderPass(LogicalDevice, &RenderPassCI, 0, &VkRenderPasses[0]));
 
+	CreateSwchFrameBuffers();
 
+	//End Renderpass
+
+	//SHADERS & PIPELINE
+
+	//TODO(Kyryl): This is hard coded path, assuming we are running from ./build
+	//TODO:Implement pipeline cache.
+	LoadShader("../source/shaders/Vbasic.spv");
+	LoadShader("../source/shaders/Fbasic.spv");
+
+	//The most simple layout.
+	VkPipelineLayoutCreateInfo PipelineLayoutCI;
+	PipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	PipelineLayoutCI.pNext = NULL;
+	PipelineLayoutCI.flags = 0;
+	PipelineLayoutCI.setLayoutCount = 0;
+	PipelineLayoutCI.pSetLayouts = NULL;
+	PipelineLayoutCI.pushConstantRangeCount = 0;
+	PipelineLayoutCI.pPushConstantRanges = NULL;
+	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[0]));
+
+	CreateBasicShaderPipeline(VK_POLYGON_MODE_FILL);
+
+
+	//End SHADERS & PIPELINE
 
 	//End RENDER RESOURCES
+
+	Trace("Reached target: (Init) Final Step");
+
 
 	return true;
 

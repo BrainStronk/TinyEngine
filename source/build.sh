@@ -32,6 +32,14 @@ fi
 assertInstalled $CC
 mkdir -p ../build
 
+function shaders()
+{
+	assertInstalled glslangValidator
+	glslangValidator -V ./shaders/basic.vert.glsl -o ./shaders/Vbasic.spv
+	glslangValidator -V ./shaders/basic.frag.glsl -o ./shaders/Fbasic.spv
+	exit 0
+}
+
 function cross()
 {
 	$CC win32_tinyengine.c -luser32 -ld3d11 -ldxguid -o ../build/tinyengine.exe
@@ -42,6 +50,7 @@ function linux()
 {
 	assertInstalled gcc
 	gcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
+	shaders
 	exit 0
 }
 
@@ -49,6 +58,7 @@ function linux_tcc()
 {
 	assertInstalled tcc
 	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
+	shaders
 	exit 0
 }
 

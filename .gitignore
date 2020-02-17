@@ -7,3 +7,4 @@ build/
 *.code-workspace
 /source/tags
 /source/log.txt
+/source/shaders/*.spv
