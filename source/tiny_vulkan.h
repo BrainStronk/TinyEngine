@@ -800,7 +800,7 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 //NOTE(Kyryl):
 //There will be one huge buffer, so in theory this function
 //should be called only once, but may be used in case of scarcity
-void *VboMalloc(int size, VkBuffer *buffer)
+void *VboMalloc(u32 Size, VkBuffer *Buffer)
 {
 	ASSERT(VboAllocCount < NUM_MAXALLOC_VBO, "VBO MAXALLOC");
 
@@ -808,16 +808,16 @@ void *VboMalloc(int size, VkBuffer *buffer)
 	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	BufferCI.pNext = NULL;
 	BufferCI.flags = 0;
-	BufferCI.size = size;
+	BufferCI.size = Size;
 	BufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
 	BufferCI.sharingMode = 0;
 	BufferCI.queueFamilyIndexCount = 0;
 	BufferCI.pQueueFamilyIndices = NULL;
 
-	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, buffer), "vkCreateBuffer failed!");
+	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, Buffer), "vkCreateBuffer failed!");
 
 	VkMemoryRequirements MemoryRequirements;
-	vkGetBufferMemoryRequirements(LogicalDevice, *buffer, &MemoryRequirements);
+	vkGetBufferMemoryRequirements(LogicalDevice, *Buffer, &MemoryRequirements);
 
 	s32 AlignMod = MemoryRequirements.size % MemoryRequirements.alignment;
 	s32 AlignedSize = ((MemoryRequirements.size % MemoryRequirements.alignment) == 0)
@@ -832,13 +832,13 @@ void *VboMalloc(int size, VkBuffer *buffer)
 
 	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &VboDeviceMemory[VboAllocCount]), "vkAllocateMemory failed!");
 
-	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *buffer, VboDeviceMemory[VboAllocCount], AlignedSize), "vkBindBufferMemory failed!");
+	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *Buffer, VboDeviceMemory[VboAllocCount], 0), "vkBindBufferMemory failed!");
 
-	void *data;
-	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &data),"vkMapMemory failed!");
+	void *Data;
+	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
 
 	VboAllocCount++;
-	return data;
+	return Data;
 }
 
 void *ZMalloc(s32 Size, u8 Zoneid)
@@ -1637,7 +1637,13 @@ __continue:;
 	//End Vulkan Queue
 
 	//Swapchain
-	SwchImageCount = SurfaceCapabilities.maxImageCount + 1;
+	SwchImageCount = SurfaceCapabilities.minImageCount + 1;
+	if(SurfaceCapabilities.maxImageCount > 0 && SwchImageCount > SurfaceCapabilities.maxImageCount)
+	{
+		SwchImageCount = SurfaceCapabilities.maxImageCount;
+	}
+	SwchImageCount += 1;
+
 	SwchImageViews = (VkImageView*) malloc(sizeof(VkImageView) * SwchImageCount);
 
 	VkImageUsageFlags TmpImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
