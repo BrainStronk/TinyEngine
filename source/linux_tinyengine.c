@@ -149,6 +149,9 @@ int main(int argc, char** argv)
 			case GravityNotify:
 				break;
 		}
+		VkBeginRendering();
+		//DRAW commands go in between Begin and End respectively.
+		VkEndRendering();
 	}
 
 	XCloseDisplay(Wnd.Display);

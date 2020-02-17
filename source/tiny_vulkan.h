@@ -344,6 +344,7 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 //FORWARD DECLARATIONS
 const char *GetVulkanResultString(VkResult result);
 s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
+void PostInit();
 //--------------------
 
 #ifdef TINYENGINE_DEBUG
@@ -507,6 +508,18 @@ VkShaderModule VkShaderModules[NUM_SHADERS];
 VkPipelineCache PipelineCache; //TODO
 u32 ShaderCount;
 //------------------SHADERS
+
+//POST INIT
+VkClearValue ClearColor[2];
+VkClearColorValue ColorValue;
+VkImageSubresourceRange ImageSubResourceRange;
+VkImageMemoryBarrier EndRenderMemBarrier;
+VkImageMemoryBarrier BeginRenderMemBarrier;
+VkSubmitInfo SubmitInfo;
+VkPresentInfoKHR PresentInfo;
+u32 ImageIndex;
+VkPipelineStageFlags PipelineStageFlags;
+//POST INIT
 
 //----------------------------------------------------VULKAN GLOBALS
 
@@ -936,7 +949,7 @@ void ZFree(void *Ptr, u8 Zoneid)
 	}
 }
 
-void *ZRealloc(void *Ptr, int Size, uint8_t Zoneid)
+void *ZRealloc(void *Ptr, int Size, u8 Zoneid)
 {
 	int OldSize;
 	void *OldPtr;
@@ -1050,7 +1063,7 @@ void LoadShader(const char* Path)
 	ShaderModuleCI.pNext = NULL;
 	ShaderModuleCI.flags = 0;
 	ShaderModuleCI.codeSize = Length;
-	ShaderModuleCI.pCode = (const uint32_t*)(Buffer);
+	ShaderModuleCI.pCode = (const u32*)(Buffer);
 
 	VK_CHECK(vkCreateShaderModule(LogicalDevice, &ShaderModuleCI, 0, &VkShaderModules[ShaderCount]));
 	ShaderCount++;
@@ -1765,8 +1778,153 @@ out:;
 
 	Trace("Reached target: (Init) Final Step");
 
+	//POST INIT
+	//(Kyryl): Prepares vulkan objects used at real time rendering.
+	PostInit();
 
+	//End POST INIT
 	return true;
+
+}
+
+void PostInit()
+{
+	PipelineStageFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+	ColorValue.float32[0] = 0;
+	ColorValue.float32[1] = 0;
+	ColorValue.float32[2] = 0;
+	ColorValue.float32[3] = 1;
+	ClearColor[0].color = ColorValue;
+	ClearColor[1].depthStencil.depth = 1.0f;
+	ClearColor[1].depthStencil.stencil = 0;
+
+	ImageSubResourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	ImageSubResourceRange.baseMipLevel = 0;
+	ImageSubResourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+	ImageSubResourceRange.baseArrayLayer = 0;
+	ImageSubResourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+	BeginRenderMemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	BeginRenderMemBarrier.pNext = NULL;
+	BeginRenderMemBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+	BeginRenderMemBarrier.dstAccessMask = 0;
+	BeginRenderMemBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	BeginRenderMemBarrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	BeginRenderMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	BeginRenderMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	BeginRenderMemBarrier.subresourceRange = ImageSubResourceRange;
+
+	EndRenderMemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	EndRenderMemBarrier.pNext = NULL;
+	EndRenderMemBarrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+	EndRenderMemBarrier.dstAccessMask = 0;
+	EndRenderMemBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	EndRenderMemBarrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	EndRenderMemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	EndRenderMemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	EndRenderMemBarrier.subresourceRange = ImageSubResourceRange;
+
+	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	SubmitInfo.pNext = NULL;
+	SubmitInfo.waitSemaphoreCount = 1;
+	SubmitInfo.pWaitSemaphores = &VkSemaphores[0];
+	SubmitInfo.pWaitDstStageMask = &PipelineStageFlags;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &VkCommandBuffers[0];
+	SubmitInfo.signalSemaphoreCount = 1;
+	SubmitInfo.pSignalSemaphores = &VkSemaphores[1];
+
+	PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+	PresentInfo.pNext = NULL;
+	PresentInfo.waitSemaphoreCount = 1;
+	PresentInfo.pWaitSemaphores = &VkSemaphores[1];
+	PresentInfo.swapchainCount = 1;
+	PresentInfo.pSwapchains = &VkSwapchains[0];
+	PresentInfo.pImageIndices = &ImageIndex;
+	PresentInfo.pResults = NULL;
+}
+
+void VkBeginRendering()
+{
+	VkResult result;
+	vkResetFences(LogicalDevice, 1, &VkFences[0]);
+
+	//tell hardware to not wait more than 1 second.
+wait:
+	result = vkAcquireNextImageKHR(LogicalDevice, VkSwapchains[0], 1000000000, VkSemaphores[0], VkFences[0], &ImageIndex);
+	switch( result )
+	{
+	case VK_SUCCESS:
+		break;
+	case VK_SUBOPTIMAL_KHR:
+		break;
+	case VK_TIMEOUT:
+		Info("VK_TIMEOUT");
+		goto wait;
+	case VK_ERROR_OUT_OF_DATE_KHR:
+		Info("VkBeginRendering: VK_ERROR_OUT_OF_DATE_KHR");
+		goto wait;
+	default:
+		VK_CHECK(result);
+		return;
+	}
+
+	VkCommandBufferBeginInfo CommandBufferBI;
+	CommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	CommandBufferBI.pNext = NULL;
+	CommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
+	CommandBufferBI.pInheritanceInfo = NULL;
+
+	VK_MCHECK(vkBeginCommandBuffer(VkCommandBuffers[0], &CommandBufferBI),"vkBeginCommandBuffer failed!");
+
+	VkRect2D RenderArea;
+	RenderArea.extent.width = SwchImageSize.width;
+	RenderArea.extent.height = SwchImageSize.height;
+
+	BeginRenderMemBarrier.image = SwchImages[ImageIndex];
+
+	vkCmdPipelineBarrier(VkCommandBuffers[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+	                     0, 0, NULL, 0, NULL, 1, &BeginRenderMemBarrier);
+
+	VkRenderPassBeginInfo RenderPassBI;
+	RenderPassBI.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	RenderPassBI.pNext = NULL;
+	RenderPassBI.renderPass = VkRenderPasses[0];
+	RenderPassBI.framebuffer = VkFramebuffers[0];
+	RenderPassBI.renderArea = RenderArea;
+	RenderPassBI.clearValueCount = 2;
+	RenderPassBI.pClearValues = ClearColor;
+
+	vkCmdBeginRenderPass(VkCommandBuffers[0], &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
+}
+
+void VkEndRendering()
+{
+	VkResult result;
+	vkCmdEndRenderPass(VkCommandBuffers[0]);
+
+	//transition swapchain image format
+	EndRenderMemBarrier.image = SwchImages[ImageIndex];
+
+	vkCmdPipelineBarrier(VkCommandBuffers[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+	                     0, 0, NULL, 0, NULL, 1, &EndRenderMemBarrier);
+
+	VK_CHECK(vkEndCommandBuffer(VkCommandBuffers[0]));
+	VK_CHECK(vkQueueSubmit(VkQueues[0], 1, &SubmitInfo, VkFences[0]));
+	result = vkQueuePresentKHR(VkQueues[0], &PresentInfo);
+	vkWaitForFences(LogicalDevice, 1, &VkFences[0], VK_TRUE, UINT64_MAX);
+
+	switch(result)
+	{
+	case VK_SUCCESS:
+		return;
+	case VK_ERROR_OUT_OF_DATE_KHR:
+		Info("VkEndRendering: VK_ERROR_OUT_OF_DATE_KHR");
+		return; //TODO(URGENT/CRITICAL)(Kyryl): Handle this.
+	default:
+		VK_CHECK(result);
+		return;
+	}
 
 }
 
