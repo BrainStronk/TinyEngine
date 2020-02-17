@@ -19,7 +19,6 @@
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
-#include "tinyengine.c"
 
 #define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad (PS3)
 
@@ -47,6 +46,7 @@ Win32PrintDebugString(char* Format, ...)
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
 }
+#include "tinyengine.c" // IMPORTANT
 
 typedef struct win32_audio_thread_params
 {
@@ -333,8 +333,8 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                     tiny_event Event = {0};
                     Event.Type = TINY_EVENT_TYPE_MOUSE;
                     Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
-                    Event.Mouse.Button = TINY_EVENT_NO_INPUT;
-                    Event.Mouse.IsDown = TINY_EVENT_NO_INPUT;
+                    Event.Mouse.Button = false;
+                    Event.Mouse.IsDown = false;
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -386,11 +386,11 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                     }
 
                     // TODO(hayden): Assert this?
-                    if(Event.Mouse.Button != TINY_EVENT_NO_INPUT) // Don't push events we aren't choosing to handle
+                    if(Event.Mouse.Button != false) // Don't push events we aren't choosing to handle
                     {
                         Tiny_PushInputEvent(Event);
                     }
-                }
+                } 
                 else if(RawInput->header.dwType == RIM_TYPEKEYBOARD)
                 {
                     // TODO(hayden): Handle Alt-F4!
@@ -562,7 +562,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         tiny_event Event = {0};
                         Event.Type = TINY_EVENT_TYPE_KEYBOARD;
                         Event.Keyboard.IsDown = IsDown;
-                        Event.Keyboard.KeyType = TINY_EVENT_NO_INPUT;
+                        Event.Keyboard.KeyType = false;
 
                         // Assign VirtualKey to Engine's te_key_type enum
                         if((VirtualKey >= '0') && (VirtualKey <= '9'))
@@ -571,7 +571,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
-                                    Event.Keyboard.KeyType = VKIndex - '0';
+                                    Event.Keyboard.KeyType = VKIndex;
                                 }
                             }
                         }
@@ -582,13 +582,13 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
-                                    Event.Keyboard.KeyType = VKIndex - (0x41-Offset);
+                                    Event.Keyboard.KeyType = VKIndex;
                                 }
                             }
                         }
                         else if((VirtualKey >= VK_NUMPAD0) && (VirtualKey <= VK_DIVIDE))
                         {
-                            int Offset = 10 + 26;
+                            int Offset = KEY_NUMPAD_0;
                             for(int VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
@@ -599,7 +599,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         }
                         else if((VirtualKey >= VK_F1) && (VirtualKey <= VK_F24))
                         {
-                            int Offset = 10 + 26 + 16;
+                            int Offset = KEY_F1;
                             for(int VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
@@ -610,7 +610,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         }
                         else if((VirtualKey >= VK_LEFT) && (VirtualKey <= VK_DOWN))
                         {
-                            int Offset = 10 + 26 + 16 + 24;
+                            int Offset = KEY_LEFT;
                             for(int VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
@@ -1156,6 +1156,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             
                             Tiny_Update(&Global_Platform);
                             Tiny_Render();
+
+                            Tiny_ClearEventQueue();
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }

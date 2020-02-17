@@ -1,16 +1,15 @@
 #ifndef TINYENGINE_PLATFORM_H
 #define TINYENGINE_PLATFORM_H
 
-#define TINY_EVENT_NO_INPUT -1
 typedef enum tiny_event_type
 {
-    TINY_EVENT_TYPE_KEYBOARD,
+    TINY_EVENT_TYPE_KEYBOARD = 1,
     TINY_EVENT_TYPE_MOUSE,  
 } tiny_event_type;
 
 typedef enum tiny_event_mouse_button
 {
-    MOUSE_LEFT,
+    MOUSE_LEFT = 1,
     MOUSE_MIDDLE,
     MOUSE_RIGHT,
     MOUSE_EXTRA1,
@@ -20,7 +19,7 @@ typedef enum tiny_event_mouse_button
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
 typedef enum tiny_event_key_type
 {
-    KEY_0,
+    KEY_0 = '0',
     KEY_1,
     KEY_2,
     KEY_3,
@@ -31,7 +30,7 @@ typedef enum tiny_event_key_type
     KEY_8,
     KEY_9,
 
-    KEY_A,
+    KEY_A = 'A',
     KEY_B,
     KEY_C,
     KEY_D,
@@ -223,7 +222,7 @@ typedef struct tiny_event_keyboard
 // TODO(hayden): Preface with TINY_EVENT or not?
 typedef enum tiny_event_mouse_event_type
 {
-    TINY_EVENT_MOUSE_MOVE,
+    TINY_EVENT_MOUSE_MOVE = 1,
     TINY_EVENT_MOUSE_CLICK,
 } tiny_event_mouse_event_type;
 

@@ -10,6 +10,38 @@ Tiny_ProcessDigitalButton(tiny_digital_button *Button, b32 WasDown)
     Button->Released = (Button->Up == 1);
 }
 
+static void
+Tiny_ClearEventQueue(void)
+{
+    for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
+    {
+        // TODO(hayden): Set everything to TINY_EVENT_NO_INPUT?
+        tiny_event NoEvent = {0};
+        Global_Platform.EventQueue[ClearIndex] = NoEvent;
+    }
+    Global_Platform.EventQueueIndex = 0;
+}
+
+static b32
+Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
+{
+    b32 HasRemainingData;
+
+    // Copy event over
+    *Event = Platform->EventQueue[Platform->EventQueueIndex];
+    
+    // Clear the Platform's event
+    Platform->EventQueue[Platform->EventQueueIndex] = (tiny_event){0};
+
+    // If the event has a Type, assume there is remaining data
+    HasRemainingData = Event->Type;
+
+    // Decrement EventQueueIndex for next time
+    --Platform->EventQueueIndex;
+
+    return(HasRemainingData);
+}
+
 b32 KeyboardState[TINY_EVENT_MAX_KEYS]; // NOTE: true == IsDown
 tiny_digital_button Keyboard[TINY_EVENT_MAX_KEYS];
 
@@ -20,11 +52,16 @@ Tiny_Update(tiny_platform *Platform)
 
     { // Update input events
         // Update KeyboardState with new events
-        for(int EventIndex = 0; EventIndex < Platform->EventQueueIndex; ++EventIndex)
+        tiny_event Event;
+        while(Tiny_GetMessage(Platform, &Event)) // TODO(hayden): fix
         {
-            if(Platform->EventQueue[EventIndex].Type == TINY_EVENT_TYPE_KEYBOARD)
+            if(Event.Type == TINY_EVENT_TYPE_KEYBOARD)
             {
-                KeyboardState[Platform->EventQueue[EventIndex].Keyboard.KeyType] = Platform->EventQueue[EventIndex].Keyboard.IsDown;
+                KeyboardState[Event.Keyboard.KeyType] = Event.Keyboard.IsDown;
+            }
+            else if(Event.Type == TINY_EVENT_TYPE_MOUSE)
+            {
+                // TODO(hayden): Mouse!
             }
         }
 
@@ -33,15 +70,6 @@ Tiny_Update(tiny_platform *Platform)
         {
             Tiny_ProcessDigitalButton(&Keyboard[InputIndex], KeyboardState[InputIndex]);
         }
-
-        // Clear event queue
-        for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
-        {
-            // TODO(hayden): Set everything to TINY_EVENT_NO_INPUT?
-            tiny_event NoEvent = {TINY_EVENT_NO_INPUT};
-            Global_Platform.EventQueue[ClearIndex] = NoEvent;
-        }
-        Global_Platform.EventQueueIndex = 0;
     }
 }
 
