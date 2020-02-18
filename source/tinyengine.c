@@ -10,18 +10,6 @@ Tiny_ProcessDigitalButton(tiny_digital_button *Button, b32 WasDown)
     Button->Released = (Button->Up == 1);
 }
 
-static void
-Tiny_ClearEventQueue(void)
-{
-    for(int ClearIndex = 0; ClearIndex < Global_Platform.EventQueueIndex; ++ClearIndex)
-    {
-        // TODO(hayden): Set everything to TINY_EVENT_NO_INPUT?
-        tiny_event NoEvent = {0};
-        Global_Platform.EventQueue[ClearIndex] = NoEvent;
-    }
-    Global_Platform.EventQueueIndex = 0;
-}
-
 static b32
 Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
 {
