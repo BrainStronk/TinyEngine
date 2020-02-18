@@ -19,6 +19,7 @@
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
+#include "tinyengine.c"
 
 #define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad (PS3)
 
@@ -46,7 +47,6 @@ Win32PrintDebugString(char* Format, ...)
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
 }
-#include "tinyengine.c" // IMPORTANT
 
 typedef struct win32_audio_thread_params
 {
