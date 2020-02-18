@@ -25,6 +25,12 @@ typedef float f64;
 
 #define ArrayCount(Array) (sizeof(Array) / sizeof((Array)[0]))
 
+#ifdef TINY_ENGINE_DEBUG
+#define Assert(Expression) if(!(Expression)) {*(int *)0 = 0;}
+#else
+#define Assert(Expression)
+#endif
+
 #define	min(a, b)(((a) < (b)) ? (a) : (b))
 #define	max(a, b)(((a) > (b)) ? (a) : (b))
 

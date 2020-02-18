@@ -6,7 +6,7 @@ Anyone can commit code into the TinyEngine code base if they go through the righ
 TinyEngine is CC0, so before you merge your code into the engine be sure that you're okay with your code being released into the Public Domain.
 
 ## Pull Request workflow
-1. Create a new branch for the feature/bug you are working on. There should be a Github issue related to this.
+1. Create a new branch for the feature/bug you are working on. **There should be a Github issue related to this**.
 2. Do the work to fix X bug or add X feature.
 3. Open a Pull Request to merge your code into the master branch.
 4. Wait for CI, and make sure it passes.  
@@ -15,7 +15,7 @@ TinyEngine is CC0, so before you merge your code into the engine be sure that yo
 ## Style Guide
 
 Snake case for types, structs, and classes:
-`struct my_awesome_struct {}; `
+`typedef struct my_awesome_struct {} my_awesome_struct; `
 
 Functions and methods should be pascal case:
 `
@@ -32,6 +32,12 @@ Braces should always go on a new line when introducing scope, this is **not** ok
 void ThisIsTheBestFuncEver(int X) { 
 }
 ```
+
+With pointers the `*` should always be with the name instead of the type i.e: `void *TheBuffer`
+
+Filenames should be prefixed with the platform name i.e `win32_tinyengine.cpp`, if the file isn't platform specific it should be prefixed with the project name i.e: `tinyengine_renderer.cpp`
+
+Variable names should be long and verbose, one or two letter variable names is not acceptable. 
 
 ### General Programming Practices:
 - Keep the code base simple and make abstractions where it makes sense
