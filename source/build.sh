@@ -37,7 +37,13 @@ function shaders()
 	assertInstalled glslangValidator
 	glslangValidator -V ./shaders/basic.vert.glsl -o ./shaders/Vbasic.spv
 	glslangValidator -V ./shaders/basic.frag.glsl -o ./shaders/Fbasic.spv
-	exit 0
+}
+
+function hexshaders()
+{
+	assertInstalled glslangValidator
+	glslangValidator -V ./shaders/basic.vert.glsl -o ./shaders/Vbasic.h --vn Vbasic
+	glslangValidator -V ./shaders/basic.frag.glsl -o ./shaders/Fbasic.h --vn Fbasic
 }
 
 function cross()
@@ -48,17 +54,29 @@ function cross()
 
 function linuxx11()
 {
+	if [ "$1" == "1" ]
+	then
+		hexshaders
+		gcc -O3 -g  -DHEX_SHADERS -I./shaders -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
+		exit 0
+	fi
+	shaders
 	assertInstalled gcc
 	gcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
-	shaders
 	exit 0
 }
 
 function linuxx11tcc()
 {
-	assertInstalled tcc
-	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
+	if [ "$1" == "1" ]
+	then
+		hexshaders
+		tcc -O3 -g  -DHEX_SHADERS -I./shaders -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
+		exit 0
+	fi
 	shaders
+	assertInstalled gcc
+	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
 	exit 0
 }
 
@@ -70,9 +88,13 @@ function help()
 	echo "./build.sh cross"
 	echo "./build.sh linuxx11"
 	echo "./build.sh linuxx11tcc"
+	echo "./build.sh linuxx11 1"
+	echo "./build.sh linuxx11tcc 1"
 	echo "1. windows build with cross compiler (linux & windows)"
 	echo "2. linux X11 build with gcc"
 	echo "3. linux X11 build with tcc"
+	echo "4. linux X11 build with gcc and compile shaders to hex .h file"
+	echo "5. linux X11 build with tcc and compile shaders to hex .h file"
 }
 
 "$@"

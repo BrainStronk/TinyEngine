@@ -178,6 +178,10 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 #define VK_NO_PROTOTYPES
 #include "vulkan_core.h"
 
+#ifdef HEX_SHADERS
+#include "Vbasic.h"
+#include "Fbasic.h"
+#endif
 
 //TINYVULKAN LOGGER.
 //TODO(Everyone):
@@ -1368,6 +1372,20 @@ void LoadShader(const char* Path)
 	ShaderCount++;
 }
 
+void LoadHexShader(const u32 *Buffer, u32 Size)
+{
+	ASSERT(ShaderCount < NUM_SHADERS, "Out of shader modules, Increase NUM_SHADERS");
+	VkShaderModuleCreateInfo ShaderModuleCI;
+	ShaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	ShaderModuleCI.pNext = NULL;
+	ShaderModuleCI.flags = 0;
+	ShaderModuleCI.codeSize = Size;
+	ShaderModuleCI.pCode = Buffer;
+
+	VK_CHECK(vkCreateShaderModule(LogicalDevice, &ShaderModuleCI, 0, &VkShaderModules[ShaderCount]));
+	ShaderCount++;
+}
+
 void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 {
 	VkShaderModule vs = VkShaderModules[0];
@@ -2211,10 +2229,15 @@ out:;
 
 	//SHADERS & PIPELINE
 
-	//TODO(Kyryl): This is hard coded path, assuming we are running from ./build
 	//TODO:Implement pipeline cache.
+
+#ifdef HEX_SHADERS
+	LoadHexShader(Vbasic, ArrayCount(Vbasic)*sizeof(u32));
+	LoadHexShader(Fbasic, ArrayCount(Fbasic)*sizeof(u32));
+#else
 	LoadShader("../source/shaders/Vbasic.spv");
 	LoadShader("../source/shaders/Fbasic.spv");
+#endif
 
 	//The most simple layout.
 	VkPipelineLayoutCreateInfo PipelineLayoutCI;

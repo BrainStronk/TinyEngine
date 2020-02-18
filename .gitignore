@@ -8,3 +8,4 @@ build/
 /source/tags
 /source/log.txt
 /source/shaders/*.spv
+/source/shaders/*.h
