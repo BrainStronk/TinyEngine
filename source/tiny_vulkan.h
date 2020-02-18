@@ -178,6 +178,167 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 #define VK_NO_PROTOTYPES
 #include "vulkan_core.h"
 
+
+/*
+This file will contain platform independent vulkan code
+*/
+
+PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
+
+//GLOBAL_LEVEL_VULKAN_FUNCTION
+PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties;
+PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties;
+PFN_vkCreateInstance vkCreateInstance;
+//---
+
+//DEBUG_VULKAN_FUNCTION
+PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT;
+PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT;
+PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
+//
+
+//INSTANCE_LEVEL_VULKAN_FUNCTIONS
+PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
+PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
+PFN_vkGetPhysicalDeviceFeatures vkGetPhysicalDeviceFeatures;
+PFN_vkCreateDevice vkCreateDevice;
+PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
+PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties;
+PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties;
+PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties;
+PFN_vkDestroyInstance vkDestroyInstance;
+PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties;
+//---
+
+//EXTENSION FUNCTIONS
+PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR;
+PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
+PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
+PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
+PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR;
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR;
+#elif defined VK_USE_PLATFORM_XCB_KHR
+PFN_vkCreateXcbSurfaceKHR vkCreateXcbSurfaceKHR;
+#elif defined VK_USE_PLATFORM_XLIB_KHR
+PFN_vkCreateXlibSurfaceKHR vkCreateXlibSurfaceKHR;
+#endif
+//---
+
+//DEVICE_LEVEL_VULKAN_FUNCTION
+
+PFN_vkGetDeviceQueue vkGetDeviceQueue;
+PFN_vkDeviceWaitIdle vkDeviceWaitIdle;
+PFN_vkDestroyDevice vkDestroyDevice;
+PFN_vkCreateBuffer vkCreateBuffer;
+PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements;
+PFN_vkAllocateMemory vkAllocateMemory;
+PFN_vkBindBufferMemory vkBindBufferMemory;
+PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier;
+PFN_vkCreateImage vkCreateImage;
+PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements;
+PFN_vkBindImageMemory vkBindImageMemory;
+PFN_vkCreateImageView vkCreateImageView;
+PFN_vkMapMemory vkMapMemory;
+PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges;
+PFN_vkUnmapMemory vkUnmapMemory;
+PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
+PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
+PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer;
+PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
+PFN_vkEndCommandBuffer vkEndCommandBuffer;
+PFN_vkQueueSubmit vkQueueSubmit;
+PFN_vkDestroyImageView vkDestroyImageView;
+PFN_vkDestroyImage vkDestroyImage;
+PFN_vkDestroyBuffer vkDestroyBuffer;
+PFN_vkFreeMemory vkFreeMemory;
+PFN_vkCreateCommandPool vkCreateCommandPool;
+PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
+PFN_vkCreateSemaphore vkCreateSemaphore;
+PFN_vkCreateFence vkCreateFence;
+PFN_vkWaitForFences vkWaitForFences;
+PFN_vkResetFences vkResetFences;
+PFN_vkDestroyFence vkDestroyFence;
+PFN_vkDestroySemaphore vkDestroySemaphore;
+PFN_vkResetCommandBuffer vkResetCommandBuffer;
+PFN_vkFreeCommandBuffers vkFreeCommandBuffers;
+PFN_vkResetCommandPool vkResetCommandPool;
+PFN_vkDestroyCommandPool vkDestroyCommandPool;
+PFN_vkCreateBufferView vkCreateBufferView;
+PFN_vkDestroyBufferView vkDestroyBufferView;
+PFN_vkQueueWaitIdle vkQueueWaitIdle;
+PFN_vkCreateSampler vkCreateSampler;
+PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout;
+PFN_vkCreateDescriptorPool vkCreateDescriptorPool;
+PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets;
+PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets;
+PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
+PFN_vkFreeDescriptorSets vkFreeDescriptorSets;
+PFN_vkResetDescriptorPool vkResetDescriptorPool;
+PFN_vkDestroyDescriptorPool vkDestroyDescriptorPool;
+PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout;
+PFN_vkDestroySampler vkDestroySampler;
+PFN_vkCreateRenderPass vkCreateRenderPass;
+PFN_vkCreateFramebuffer vkCreateFramebuffer;
+PFN_vkDestroyFramebuffer vkDestroyFramebuffer;
+PFN_vkDestroyRenderPass vkDestroyRenderPass;
+PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass;
+PFN_vkCmdNextSubpass vkCmdNextSubpass;
+PFN_vkCmdEndRenderPass vkCmdEndRenderPass;
+PFN_vkCreatePipelineCache vkCreatePipelineCache;
+PFN_vkGetPipelineCacheData vkGetPipelineCacheData;
+PFN_vkMergePipelineCaches vkMergePipelineCaches;
+PFN_vkDestroyPipelineCache vkDestroyPipelineCache;
+PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
+PFN_vkCreateComputePipelines vkCreateComputePipelines;
+PFN_vkDestroyPipeline vkDestroyPipeline;
+PFN_vkDestroyEvent vkDestroyEvent;
+PFN_vkDestroyQueryPool vkDestroyQueryPool;
+PFN_vkCreateShaderModule vkCreateShaderModule;
+PFN_vkDestroyShaderModule vkDestroyShaderModule;
+PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
+PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout;
+PFN_vkCmdBindPipeline vkCmdBindPipeline;
+PFN_vkCmdSetViewport vkCmdSetViewport;
+PFN_vkCmdSetScissor vkCmdSetScissor;
+PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers;
+PFN_vkCmdDraw vkCmdDraw;
+PFN_vkCmdDrawIndexed vkCmdDrawIndexed;
+PFN_vkCmdDispatch vkCmdDispatch;
+PFN_vkCmdCopyImage vkCmdCopyImage;
+PFN_vkCmdPushConstants vkCmdPushConstants;
+PFN_vkCmdClearColorImage vkCmdClearColorImage;
+PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage;
+PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer;
+PFN_vkCmdSetLineWidth vkCmdSetLineWidth;
+PFN_vkCmdSetDepthBias vkCmdSetDepthBias;
+PFN_vkCmdSetBlendConstants vkCmdSetBlendConstants;
+PFN_vkCmdExecuteCommands vkCmdExecuteCommands;
+PFN_vkCmdClearAttachments vkCmdClearAttachments;
+PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges;
+PFN_vkCreateQueryPool vkCreateQueryPool;
+PFN_vkCmdWriteTimestamp vkCmdWriteTimestamp;
+PFN_vkCmdResetQueryPool vkCmdResetQueryPool;
+PFN_vkGetQueryPoolResults vkGetQueryPoolResults;
+//---
+
+//DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION
+PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR;
+PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
+PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
+PFN_vkQueuePresentKHR vkQueuePresentKHR;
+PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
+//----------------------------------------------------------------------
+
+#define EXPORTED_VULKAN_FUNCTION( name ) PFN_##name name;
+#define GLOBAL_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
+#define INSTANCE_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
+#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
+#define DEVICE_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
+#define DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
+#define TINY_VULKAN_UPDATE
+#include "tiny_vulkan.h"
+
 #ifdef HEX_SHADERS
 #include "Vbasic.h"
 #include "Fbasic.h"
@@ -194,6 +355,12 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 
 #include <time.h>
 #include "stb_sprintf.h"
+
+//FORWARD DECLARATIONS
+const char *GetVulkanResultString(VkResult result);
+s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
+void PostInit();
+//--------------------
 
 b32 LogNewLine = true;
 b32 LogExtra = true;
@@ -381,173 +548,6 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 	/* Release lock */
 	unlock();
 }
-
-
-/*
-This file will contain platform intedependent vulkan code
-*/
-
-PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
-
-//GLOBAL_LEVEL_VULKAN_FUNCTION
-PFN_vkEnumerateInstanceExtensionProperties vkEnumerateInstanceExtensionProperties;
-PFN_vkEnumerateInstanceLayerProperties vkEnumerateInstanceLayerProperties;
-PFN_vkCreateInstance vkCreateInstance;
-//---
-
-//DEBUG_VULKAN_FUNCTION
-PFN_vkCreateDebugUtilsMessengerEXT vkCreateDebugUtilsMessengerEXT;
-PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT;
-PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
-//
-
-//INSTANCE_LEVEL_VULKAN_FUNCTIONS
-PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
-PFN_vkGetPhysicalDeviceProperties vkGetPhysicalDeviceProperties;
-PFN_vkGetPhysicalDeviceFeatures vkGetPhysicalDeviceFeatures;
-PFN_vkCreateDevice vkCreateDevice;
-PFN_vkGetDeviceProcAddr vkGetDeviceProcAddr;
-PFN_vkEnumerateDeviceExtensionProperties vkEnumerateDeviceExtensionProperties;
-PFN_vkGetPhysicalDeviceQueueFamilyProperties vkGetPhysicalDeviceQueueFamilyProperties;
-PFN_vkGetPhysicalDeviceMemoryProperties vkGetPhysicalDeviceMemoryProperties;
-PFN_vkDestroyInstance vkDestroyInstance;
-PFN_vkGetPhysicalDeviceFormatProperties vkGetPhysicalDeviceFormatProperties;
-//---
-
-//EXTENSION FUNCTIONS
-PFN_vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceSupportKHR;
-PFN_vkGetPhysicalDeviceSurfaceCapabilitiesKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR;
-PFN_vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfaceFormatsKHR;
-PFN_vkGetPhysicalDeviceSurfacePresentModesKHR vkGetPhysicalDeviceSurfacePresentModesKHR;
-PFN_vkDestroySurfaceKHR vkDestroySurfaceKHR;
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-PFN_vkCreateWin32SurfaceKHR vkCreateWin32SurfaceKHR;
-#elif defined VK_USE_PLATFORM_XCB_KHR
-PFN_vkCreateXcbSurfaceKHR vkCreateXcbSurfaceKHR;
-#elif defined VK_USE_PLATFORM_XLIB_KHR
-PFN_vkCreateXlibSurfaceKHR vkCreateXlibSurfaceKHR;
-#endif
-//---
-
-//DEVICE_LEVEL_VULKAN_FUNCTION
-
-PFN_vkGetDeviceQueue vkGetDeviceQueue;
-PFN_vkDeviceWaitIdle vkDeviceWaitIdle;
-PFN_vkDestroyDevice vkDestroyDevice;
-PFN_vkCreateBuffer vkCreateBuffer;
-PFN_vkGetBufferMemoryRequirements vkGetBufferMemoryRequirements;
-PFN_vkAllocateMemory vkAllocateMemory;
-PFN_vkBindBufferMemory vkBindBufferMemory;
-PFN_vkCmdPipelineBarrier vkCmdPipelineBarrier;
-PFN_vkCreateImage vkCreateImage;
-PFN_vkGetImageMemoryRequirements vkGetImageMemoryRequirements;
-PFN_vkBindImageMemory vkBindImageMemory;
-PFN_vkCreateImageView vkCreateImageView;
-PFN_vkMapMemory vkMapMemory;
-PFN_vkFlushMappedMemoryRanges vkFlushMappedMemoryRanges;
-PFN_vkUnmapMemory vkUnmapMemory;
-PFN_vkCmdCopyBuffer vkCmdCopyBuffer;
-PFN_vkCmdCopyBufferToImage vkCmdCopyBufferToImage;
-PFN_vkCmdCopyImageToBuffer vkCmdCopyImageToBuffer;
-PFN_vkBeginCommandBuffer vkBeginCommandBuffer;
-PFN_vkEndCommandBuffer vkEndCommandBuffer;
-PFN_vkQueueSubmit vkQueueSubmit;
-PFN_vkDestroyImageView vkDestroyImageView;
-PFN_vkDestroyImage vkDestroyImage;
-PFN_vkDestroyBuffer vkDestroyBuffer;
-PFN_vkFreeMemory vkFreeMemory;
-PFN_vkCreateCommandPool vkCreateCommandPool;
-PFN_vkAllocateCommandBuffers vkAllocateCommandBuffers;
-PFN_vkCreateSemaphore vkCreateSemaphore;
-PFN_vkCreateFence vkCreateFence;
-PFN_vkWaitForFences vkWaitForFences;
-PFN_vkResetFences vkResetFences;
-PFN_vkDestroyFence vkDestroyFence;
-PFN_vkDestroySemaphore vkDestroySemaphore;
-PFN_vkResetCommandBuffer vkResetCommandBuffer;
-PFN_vkFreeCommandBuffers vkFreeCommandBuffers;
-PFN_vkResetCommandPool vkResetCommandPool;
-PFN_vkDestroyCommandPool vkDestroyCommandPool;
-PFN_vkCreateBufferView vkCreateBufferView;
-PFN_vkDestroyBufferView vkDestroyBufferView;
-PFN_vkQueueWaitIdle vkQueueWaitIdle;
-PFN_vkCreateSampler vkCreateSampler;
-PFN_vkCreateDescriptorSetLayout vkCreateDescriptorSetLayout;
-PFN_vkCreateDescriptorPool vkCreateDescriptorPool;
-PFN_vkAllocateDescriptorSets vkAllocateDescriptorSets;
-PFN_vkUpdateDescriptorSets vkUpdateDescriptorSets;
-PFN_vkCmdBindDescriptorSets vkCmdBindDescriptorSets;
-PFN_vkFreeDescriptorSets vkFreeDescriptorSets;
-PFN_vkResetDescriptorPool vkResetDescriptorPool;
-PFN_vkDestroyDescriptorPool vkDestroyDescriptorPool;
-PFN_vkDestroyDescriptorSetLayout vkDestroyDescriptorSetLayout;
-PFN_vkDestroySampler vkDestroySampler;
-PFN_vkCreateRenderPass vkCreateRenderPass;
-PFN_vkCreateFramebuffer vkCreateFramebuffer;
-PFN_vkDestroyFramebuffer vkDestroyFramebuffer;
-PFN_vkDestroyRenderPass vkDestroyRenderPass;
-PFN_vkCmdBeginRenderPass vkCmdBeginRenderPass;
-PFN_vkCmdNextSubpass vkCmdNextSubpass;
-PFN_vkCmdEndRenderPass vkCmdEndRenderPass;
-PFN_vkCreatePipelineCache vkCreatePipelineCache;
-PFN_vkGetPipelineCacheData vkGetPipelineCacheData;
-PFN_vkMergePipelineCaches vkMergePipelineCaches;
-PFN_vkDestroyPipelineCache vkDestroyPipelineCache;
-PFN_vkCreateGraphicsPipelines vkCreateGraphicsPipelines;
-PFN_vkCreateComputePipelines vkCreateComputePipelines;
-PFN_vkDestroyPipeline vkDestroyPipeline;
-PFN_vkDestroyEvent vkDestroyEvent;
-PFN_vkDestroyQueryPool vkDestroyQueryPool;
-PFN_vkCreateShaderModule vkCreateShaderModule;
-PFN_vkDestroyShaderModule vkDestroyShaderModule;
-PFN_vkCreatePipelineLayout vkCreatePipelineLayout;
-PFN_vkDestroyPipelineLayout vkDestroyPipelineLayout;
-PFN_vkCmdBindPipeline vkCmdBindPipeline;
-PFN_vkCmdSetViewport vkCmdSetViewport;
-PFN_vkCmdSetScissor vkCmdSetScissor;
-PFN_vkCmdBindVertexBuffers vkCmdBindVertexBuffers;
-PFN_vkCmdDraw vkCmdDraw;
-PFN_vkCmdDrawIndexed vkCmdDrawIndexed;
-PFN_vkCmdDispatch vkCmdDispatch;
-PFN_vkCmdCopyImage vkCmdCopyImage;
-PFN_vkCmdPushConstants vkCmdPushConstants;
-PFN_vkCmdClearColorImage vkCmdClearColorImage;
-PFN_vkCmdClearDepthStencilImage vkCmdClearDepthStencilImage;
-PFN_vkCmdBindIndexBuffer vkCmdBindIndexBuffer;
-PFN_vkCmdSetLineWidth vkCmdSetLineWidth;
-PFN_vkCmdSetDepthBias vkCmdSetDepthBias;
-PFN_vkCmdSetBlendConstants vkCmdSetBlendConstants;
-PFN_vkCmdExecuteCommands vkCmdExecuteCommands;
-PFN_vkCmdClearAttachments vkCmdClearAttachments;
-PFN_vkInvalidateMappedMemoryRanges vkInvalidateMappedMemoryRanges;
-PFN_vkCreateQueryPool vkCreateQueryPool;
-PFN_vkCmdWriteTimestamp vkCmdWriteTimestamp;
-PFN_vkCmdResetQueryPool vkCmdResetQueryPool;
-PFN_vkGetQueryPoolResults vkGetQueryPoolResults;
-//---
-
-//DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION
-PFN_vkCreateSwapchainKHR vkCreateSwapchainKHR;
-PFN_vkGetSwapchainImagesKHR vkGetSwapchainImagesKHR;
-PFN_vkAcquireNextImageKHR vkAcquireNextImageKHR;
-PFN_vkQueuePresentKHR vkQueuePresentKHR;
-PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
-//----------------------------------------------------------------------
-
-#define EXPORTED_VULKAN_FUNCTION( name ) PFN_##name name;
-#define GLOBAL_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
-#define INSTANCE_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
-#define INSTANCE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
-#define DEVICE_LEVEL_VULKAN_FUNCTION( name ) PFN_##name name;
-#define DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( name, extension ) PFN_##name name;
-#define TINY_VULKAN_UPDATE
-#include "tiny_vulkan.h"
-
-//FORWARD DECLARATIONS
-const char *GetVulkanResultString(VkResult result);
-s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
-void PostInit();
-//--------------------
 
 #ifdef TINYENGINE_DEBUG
 #   define ASSERT(condition, message, ...) \
