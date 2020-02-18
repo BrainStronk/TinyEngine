@@ -1157,8 +1157,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Tiny_Update(&Global_Platform);
                             Tiny_Render();
 
-                            Tiny_ClearEventQueue();
-
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }
                     }

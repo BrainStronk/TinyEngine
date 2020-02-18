@@ -56,6 +56,10 @@ Tiny_Update(tiny_platform *Platform)
                     MouseButtonState[Event.Mouse.Button] = Event.Mouse.IsDown;
                 }
             }
+            else
+            {
+                Assert(!"Unhandled message");
+            }
         }
 
         // Update Keyboard based on KeyboardState
