@@ -46,18 +46,18 @@ function cross()
 	exit 0
 }
 
-function linux()
+function linuxx11()
 {
 	assertInstalled gcc
-	gcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
+	gcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
 	shaders
 	exit 0
 }
 
-function linux_tcc()
+function linuxx11tcc()
 {
 	assertInstalled tcc
-	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_tinyengine.c -o ../build/tinyengine.exe
+	tcc -O3 -g -I/usr/X11R6/include -L/usr/X11R6/lib -lX11 -lXext -lm -ldl linux_x11_tinyengine.c -o ../build/tinyengine.exe
 	shaders
 	exit 0
 }
