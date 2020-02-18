@@ -565,24 +565,24 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         Event.Keyboard.KeyType = false;
 
                         // Assign VirtualKey to Engine's te_key_type enum
-                        if((VirtualKey >= '0') && (VirtualKey <= '9'))
+                        if((VirtualKey >= 'A') && (VirtualKey <= 'Z'))
                         {
-                            for(int VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
+                            for(int VKIndex = 'A'; VKIndex <= 'Z'; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
-                                    Event.Keyboard.KeyType = VKIndex;
+                                    Event.Keyboard.KeyType = (VKIndex - 'A') + KEY_A;
                                 }
                             }
                         }
-                        else if((VirtualKey >= 'A') && (VirtualKey <= 'Z'))
+                        else if((VirtualKey >= '0') && (VirtualKey <= '9'))
                         {
-                            int Offset = 10;
-                            for(int VKIndex = 0x41; VKIndex <= 0x5A; ++VKIndex)
+                            for(int VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
                             {
+                                int Offset = KEY_0;
                                 if(VKIndex == VirtualKey)
                                 {
-                                    Event.Keyboard.KeyType = VKIndex;
+                                    Event.Keyboard.KeyType = VKIndex - ('0' - Offset);
                                 }
                             }
                         }

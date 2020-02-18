@@ -42,8 +42,10 @@ Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
     return(HasRemainingData);
 }
 
-b32 KeyboardState[TINY_EVENT_MAX_KEYS]; // NOTE: true == IsDown
+b32 KeyboardButtonState[TINY_EVENT_MAX_KEYS]; // NOTE: true == IsDown
 tiny_digital_button Keyboard[TINY_EVENT_MAX_KEYS];
+b32 MouseButtonState[TINY_EVENT_MAX_MOUSE_BUTTONS]; // NOTE: true == IsDown
+tiny_digital_button Mouse[TINY_EVENT_MAX_MOUSE_BUTTONS];
 
 static void
 Tiny_Update(tiny_platform *Platform)
@@ -51,24 +53,33 @@ Tiny_Update(tiny_platform *Platform)
     // TODO(hayden): Normalize mouse input here?
 
     { // Update input events
-        // Update KeyboardState with new events
+        // Update KeyboardState/MouseButtonState with new events
         tiny_event Event;
-        while(Tiny_GetMessage(Platform, &Event)) // TODO(hayden): fix
+        while(Tiny_GetMessage(Platform, &Event))
         {
             if(Event.Type == TINY_EVENT_TYPE_KEYBOARD)
             {
-                KeyboardState[Event.Keyboard.KeyType] = Event.Keyboard.IsDown;
+                KeyboardButtonState[Event.Keyboard.KeyType] = Event.Keyboard.IsDown;
             }
             else if(Event.Type == TINY_EVENT_TYPE_MOUSE)
             {
-                // TODO(hayden): Mouse!
+                if(Event.Mouse.Type == TINY_EVENT_MOUSE_CLICK)
+                {
+                    MouseButtonState[Event.Mouse.Button] = Event.Mouse.IsDown;
+                }
             }
         }
 
         // Update Keyboard based on KeyboardState
         for(int InputIndex = 0; InputIndex < TINY_EVENT_MAX_KEYS; ++InputIndex)
         {
-            Tiny_ProcessDigitalButton(&Keyboard[InputIndex], KeyboardState[InputIndex]);
+            Tiny_ProcessDigitalButton(&Keyboard[InputIndex], KeyboardButtonState[InputIndex]);
+        }
+
+        // Update Mouse based on MouseButtonState
+        for(int InputIndex = 0; InputIndex < TINY_EVENT_MAX_MOUSE_BUTTONS; ++InputIndex)
+        {
+            Tiny_ProcessDigitalButton(&Mouse[InputIndex], MouseButtonState[InputIndex]);
         }
     }
 }
