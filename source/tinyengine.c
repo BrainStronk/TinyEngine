@@ -1,4 +1,11 @@
-#include "tinyengine_platform.h"
+#include "tinyengine.h"
+
+static void
+Tiny_PushInputEvent(tiny_event Event)
+{
+    Global_Platform.EventQueue[Global_Platform.EventQueueIndex] = Event;
+    ++Global_Platform.EventQueueIndex;
+}
 
 static void
 Tiny_ProcessDigitalButton(tiny_digital_button *Button, b32 WasDown)
@@ -39,9 +46,9 @@ Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
     return(HasRemainingData);
 }
 
-b32 KeyboardButtonState[KEY_COUNT]; // NOTE: true == IsDown
+b32 KeyboardButtonState[KEY_COUNT];
 tiny_digital_button Keyboard[KEY_COUNT];
-b32 MouseButtonState[MOUSE_COUNT]; // NOTE: true == IsDown
+b32 MouseButtonState[MOUSE_COUNT];
 tiny_digital_button Mouse[MOUSE_COUNT];
 
 static void
