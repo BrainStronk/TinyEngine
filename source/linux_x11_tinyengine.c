@@ -9,7 +9,7 @@
 #include <string.h>
 #include <dlfcn.h>
 
-#include "tinyengine_types.h"
+#include "tinyengine.h"
 #include "tiny_vulkan.h"
 
 /*

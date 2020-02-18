@@ -177,7 +177,6 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 
 #define VK_NO_PROTOTYPES
 #include "vulkan_core.h"
-#include "tinyengine_types.h"
 
 
 //TINYVULKAN LOGGER.
@@ -203,6 +202,8 @@ enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL, T_LOG };
 //useful to do fast print debugging, p(...) is nice and short
 //do not leave hanging in production code though.
 #define p(...) log_log(T_LOG, __FILE__, __LINE__, __VA_ARGS__)
+#define	min(a, b)(((a) < (b)) ? (a) : (b))
+#define	max(a, b)(((a) > (b)) ? (a) : (b))
 
 #ifdef TINYENGINE_DEBUG
 
@@ -590,11 +591,17 @@ void PostInit();
 
 //VULKAN GLOBALS
 //-----------------------------------------------------
+
+//UNCATEGORIZED VARS
+#define MAX_FRAMES_IN_FLIGHT 5 //must be less than num Semaphores, Fences. 
+//-----------------------------------------------------
 void (*VkSurfaceCallback)(VkSurfaceKHR*); //The only interface with outside world.
 VkAllocationCallbacks Allocator;
 VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
 VkDebugReportCallbackEXT VkDebugCallback;
+u32 CurrentFrame; 
+//-----------------------------------------------------
 
 //Gpu init:
 VkDevice LogicalDevice;
@@ -641,7 +648,8 @@ separate varibles, manage with indexing carefully.
 #define NUM_COMMAND_POOLS 10
 #define NUM_COMMAND_BUFFERS 10
 //----------------------------------------------------
-VkSemaphore VkSemaphores[NUM_SEMAPHORES];
+VkSemaphore VkWaitSemaphores[NUM_SEMAPHORES];
+VkSemaphore VkSignalSemaphores[NUM_SEMAPHORES];
 VkFence VkFences[NUM_FENCES];
 VkRenderPass VkRenderPasses[NUM_RENDERPASSES];
 VkFramebuffer VkFramebuffers[NUM_FRAMEBUFFERS];
@@ -650,6 +658,10 @@ VkPipeline VkPipelines[NUM_PIPELINES];
 VkPipelineLayout VkPipelineLayouts[NUM_PIPELINE_LAYOUTS];
 VkCommandPool VkCommandPools[NUM_COMMAND_POOLS];
 VkCommandBuffer VkCommandBuffers[NUM_COMMAND_BUFFERS];
+
+//FOCUS OBJECTS (1 varible version of objects above if feasible)
+VkCommandBuffer CommandBuffer;
+//-----------------------------
 
 //DEPTH
 VkImage DepthBuffer;
@@ -2050,17 +2062,25 @@ out:;
 	SemaphoreCI.pNext = NULL;
 	SemaphoreCI.flags = 0;
 
-	VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkSemaphores[0]));
-	VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkSemaphores[1]));
+	for(i = 0; i < NUM_SEMAPHORES; i++)
+	{
+		VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkWaitSemaphores[i]));
+	}
+
+	for(i = 0; i < NUM_SEMAPHORES; i++)
+	{
+		VK_CHECK(vkCreateSemaphore(LogicalDevice, &SemaphoreCI, VkAllocators, &VkSignalSemaphores[i]));
+	}
 
 	VkFenceCreateInfo FenceCI;
 	FenceCI.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	FenceCI.pNext = NULL;
 	FenceCI.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	VK_CHECK(vkCreateFence(LogicalDevice, &FenceCI, VkAllocators, &VkFences[0]));
-	VK_CHECK(vkCreateFence(LogicalDevice, &FenceCI, VkAllocators, &VkFences[1]));
-
+	for(i = 0; i < NUM_FENCES; i++)
+	{
+		VK_CHECK(vkCreateFence(LogicalDevice, &FenceCI, VkAllocators, &VkFences[i]));
+	}
 
 	//NOTE(Kyryl): We can have 1 command pool and many buffers
 	//or command pool for every command buffer. 
@@ -2087,6 +2107,7 @@ out:;
 	CommandBufferAI.commandBufferCount = NUM_COMMAND_BUFFERS;
 	VK_CHECK(vkAllocateCommandBuffers(LogicalDevice, &CommandBufferAI, &VkCommandBuffers[0]));
 
+	ASSERT(NUM_COMMAND_BUFFERS > SwchImageCount+1, "More command buffers needed, increase NUM_COMMAND_BUFFERS");
 
 	//MEMORY
 	Trace("Reached target: Memory Init");
@@ -2226,6 +2247,12 @@ out:;
 
 void PostInit()
 {
+	//Sanity checks
+	ASSERT(MAX_FRAMES_IN_FLIGHT < NUM_SEMAPHORES, "MAX_FRAMES_IN_FLIGHT > NUM_SEMAPHORES");
+	ASSERT(MAX_FRAMES_IN_FLIGHT < NUM_FENCES, "MAX_FRAMES_IN_FLIGHT > NUM_FENCES");
+
+	CurrentFrame = 0;
+
 	PipelineStageFlags = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 	ColorValue.float32[0] = 0;
 	ColorValue.float32[1] = 0;
@@ -2264,19 +2291,14 @@ void PostInit()
 	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	SubmitInfo.pNext = NULL;
 	SubmitInfo.waitSemaphoreCount = 1;
-	SubmitInfo.pWaitSemaphores = &VkSemaphores[0];
 	SubmitInfo.pWaitDstStageMask = &PipelineStageFlags;
 	SubmitInfo.commandBufferCount = 1;
-	SubmitInfo.pCommandBuffers = &VkCommandBuffers[0];
 	SubmitInfo.signalSemaphoreCount = 1;
-	SubmitInfo.pSignalSemaphores = &VkSemaphores[1];
 
 	PresentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	PresentInfo.pNext = NULL;
 	PresentInfo.waitSemaphoreCount = 1;
-	PresentInfo.pWaitSemaphores = &VkSemaphores[1];
 	PresentInfo.swapchainCount = 1;
-	PresentInfo.pSwapchains = &VkSwapchains[0];
 	PresentInfo.pImageIndices = &ImageIndex;
 	PresentInfo.pResults = NULL;
 }
@@ -2284,11 +2306,11 @@ void PostInit()
 void VkBeginRendering()
 {
 	VkResult result;
-	vkResetFences(LogicalDevice, 1, &VkFences[0]);
+	vkResetFences(LogicalDevice, 1, &VkFences[CurrentFrame]);
 
 	//tell hardware to not wait more than 1 second.
 wait:
-	result = vkAcquireNextImageKHR(LogicalDevice, VkSwapchains[0], 1000000000, VkSemaphores[0], VK_NULL_HANDLE, &ImageIndex);
+	result = vkAcquireNextImageKHR(LogicalDevice, VkSwapchains[0], 1000000000, VkSignalSemaphores[CurrentFrame], VK_NULL_HANDLE, &ImageIndex);
 	switch( result )
 	{
 	case VK_SUCCESS:
@@ -2309,13 +2331,15 @@ wait:
 		return;
 	}
 
+	CommandBuffer = VkCommandBuffers[ImageIndex];
+
 	VkCommandBufferBeginInfo CommandBufferBI;
 	CommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	CommandBufferBI.pNext = NULL;
 	CommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
 	CommandBufferBI.pInheritanceInfo = NULL;
 
-	VK_MCHECK(vkBeginCommandBuffer(VkCommandBuffers[0], &CommandBufferBI),"vkBeginCommandBuffer failed!");
+	VK_MCHECK(vkBeginCommandBuffer(CommandBuffer, &CommandBufferBI),"vkBeginCommandBuffer failed!");
 
 	VkRect2D RenderArea;
 	RenderArea.offset.x = 0;
@@ -2325,7 +2349,7 @@ wait:
 
 	BeginRenderMemBarrier.image = SwchImages[ImageIndex];
 
-	vkCmdPipelineBarrier(VkCommandBuffers[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+	vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 	                     0, 0, NULL, 0, NULL, 1, &BeginRenderMemBarrier);
 
 	VkRenderPassBeginInfo RenderPassBI;
@@ -2337,7 +2361,7 @@ wait:
 	RenderPassBI.clearValueCount = 2;
 	RenderPassBI.pClearValues = ClearColor;
 
-	vkCmdBeginRenderPass(VkCommandBuffers[0], &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
+	vkCmdBeginRenderPass(CommandBuffer, &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
 
 	VkViewport Viewport;
 	Viewport.x = 0;
@@ -2347,29 +2371,37 @@ wait:
 	Viewport.minDepth = 0;
 	Viewport.maxDepth = 1;
 
-	vkCmdSetViewport(VkCommandBuffers[0], 0, 1, &Viewport);
-	vkCmdSetScissor(VkCommandBuffers[0], 0, 1, &RenderArea);
+	vkCmdSetViewport(CommandBuffer, 0, 1, &Viewport);
+	vkCmdSetScissor(CommandBuffer, 0, 1, &RenderArea);
 }
 
 void VkEndRendering()
 {
 	VkResult result;
-	vkCmdEndRenderPass(VkCommandBuffers[0]);
+	vkCmdEndRenderPass(CommandBuffer);
 
 	//transition swapchain image format
 	EndRenderMemBarrier.image = SwchImages[ImageIndex];
 
-	vkCmdPipelineBarrier(VkCommandBuffers[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+	vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 	                     0, 0, NULL, 0, NULL, 1, &EndRenderMemBarrier);
 
-	VK_CHECK(vkEndCommandBuffer(VkCommandBuffers[0]));
-	VK_CHECK(vkQueueSubmit(VkQueues[0], 1, &SubmitInfo, VkFences[0]));
+
+	SubmitInfo.pWaitSemaphores = &VkSignalSemaphores[CurrentFrame];
+	SubmitInfo.pCommandBuffers = &CommandBuffer;
+	SubmitInfo.pSignalSemaphores = &VkWaitSemaphores[CurrentFrame];
+	PresentInfo.pWaitSemaphores = &VkWaitSemaphores[CurrentFrame];
+	PresentInfo.pSwapchains = &VkSwapchains[0];
+
+	VK_CHECK(vkEndCommandBuffer(CommandBuffer));
+	VK_CHECK(vkQueueSubmit(VkQueues[0], 1, &SubmitInfo, VkFences[CurrentFrame]));
 	result = vkQueuePresentKHR(VkQueues[0], &PresentInfo);
-	vkWaitForFences(LogicalDevice, 1, &VkFences[0], VK_TRUE, UINT64_MAX);
+	vkWaitForFences(LogicalDevice, 1, &VkFences[CurrentFrame], VK_TRUE, UINT64_MAX);
 
 	switch(result)
 	{
 	case VK_SUCCESS:
+		CurrentFrame = (CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		return;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		Info("VkEndRendering: VK_ERROR_OUT_OF_DATE_KHR");
@@ -2391,10 +2423,10 @@ void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *Index
 	VkDeviceSize IOffset = Index - (u8*) IndexBuffers[0].Data;
 	memcpy(Verts, &VertexBuffer[0], VertexCount*sizeof(Vertex));
 	memcpy(Index, &IndexBuffer[0], IndexCount*sizeof(u32));
-	vkCmdBindVertexBuffers(VkCommandBuffers[0], 0, 1, &VertexBuffers[0].Buffer, &VOffset);
-	vkCmdBindIndexBuffer(VkCommandBuffers[0], IndexBuffers[0].Buffer, IOffset, VK_INDEX_TYPE_UINT32);
-	vkCmdBindPipeline(VkCommandBuffers[0], VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
-	vkCmdDrawIndexed(VkCommandBuffers[0], IndexCount, 1, 0, 0, 0);
+	vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &VertexBuffers[0].Buffer, &VOffset);
+	vkCmdBindIndexBuffer(CommandBuffer, IndexBuffers[0].Buffer, IOffset, VK_INDEX_TYPE_UINT32);
+	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
+	vkCmdDrawIndexed(CommandBuffer, IndexCount, 1, 0, 0, 0);
 
 
 	ZFree(Verts, 1); 
