@@ -68,11 +68,11 @@ function help()
 	echo "Please specify target."
 	echo "Options:"
 	echo "./build.sh cross"
-	echo "./build.sh linux"
-	echo "./build.sh linux_tcc"
+	echo "./build.sh linuxx11"
+	echo "./build.sh linuxx11tcc"
 	echo "1. windows build with cross compiler (linux & windows)"
-	echo "2. linux build with gcc"
-	echo "3. linux build with tcc"
+	echo "2. linux X11 build with gcc"
+	echo "3. linux X11 build with tcc"
 }
 
 "$@"
