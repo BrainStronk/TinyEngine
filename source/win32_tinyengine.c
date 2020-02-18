@@ -16,9 +16,6 @@
 #endif
 #include "stb_sprintf.h"
 
-#include "tinyengine_types.h"
-#include "tinyengine_platform.h"
-
 #include "tinyengine.c"
 
 static b32 IsRunning;
@@ -1095,7 +1092,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         if(Window != INVALID_HANDLE_VALUE)
         {
             // Input
-            RAWINPUTDEVICE RawInputDevices[2]; // TODO(hayden): Joystick
+            RAWINPUTDEVICE RawInputDevices[3]; // TODO(hayden): Joystick
             { 
                 // Mouse
                 RawInputDevices[0].usUsagePage = 0x01;
@@ -1108,6 +1105,12 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[1].usUsage = 0x06;
                 RawInputDevices[1].dwFlags = RIDEV_NOLEGACY;
                 RawInputDevices[1].hwndTarget = Window;
+
+                // Joystick
+                RawInputDevices[2].usUsagePage = 0x01;
+                RawInputDevices[2].usUsage = 0x04;
+                RawInputDevices[2].dwFlags = 0;
+                RawInputDevices[2].hwndTarget = Window;
             }
 
             if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
