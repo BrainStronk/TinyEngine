@@ -14,6 +14,7 @@ static b32
 Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
 {
     b32 HasRemainingData;
+    static s32 CountUpToEventQueueIndex = 0;
 
     // Copy event over
     *Event = Platform->EventQueue[Platform->EventQueueIndex];
@@ -24,8 +25,16 @@ Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
     // If the event has a Type, assume there is remaining data
     HasRemainingData = Event->Type;
 
-    // Decrement EventQueueIndex for next time
-    --Platform->EventQueueIndex;
+    // First In, First Out
+    if(CountUpToEventQueueIndex == Platform->EventQueueIndex)
+    {
+        Platform->EventQueueIndex = 0;
+        CountUpToEventQueueIndex = 0;
+    }
+    else
+    {
+        ++CountUpToEventQueueIndex;
+    }
 
     return(HasRemainingData);
 }
@@ -58,7 +67,7 @@ Tiny_Update(tiny_platform *Platform)
             }
             else
             {
-                Assert(!"Unhandled message");
+                Assert(!"Unhandled message!");
             }
         }
 
