@@ -181,6 +181,9 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 
 
 //TINYVULKAN LOGGER.
+//TODO(Everyone):
+//Until there is a proper unified interface this logger code will stay here
+//But in the future should be put in platform layer.
 
 #ifndef STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_IMPLEMENTATION
