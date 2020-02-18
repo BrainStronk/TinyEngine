@@ -118,6 +118,8 @@ int main(int argc, char** argv)
 	while (1) 
 	{
 		//see https://tronche.com/gui/x/xlib/events/structures.html 
+		//TODO(Kyryl): These events prevent the renderer from execution. 
+		//Fork it or multithread.
 		//XNextEvent(Wnd.Display, &Event);
 
 		switch(Event.type)
@@ -184,7 +186,6 @@ int main(int argc, char** argv)
 				break;
 			case ConfigureNotify: ;
 				DbgEvent("ConfigureNotify");
-
 				break;
 			case ConfigureRequest: ;
 				DbgEvent("ConfigureRequest");

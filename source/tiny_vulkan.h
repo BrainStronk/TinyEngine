@@ -370,7 +370,7 @@ void PostInit();
 			LogExtra = true;\
 			LogNewLine = true;\
 			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
-			char Buf[10];					\
+			u8 Buf[10];					\
 			fgets(Buf, 10, stdin); \
 			exit(1); \
 		} \
@@ -630,6 +630,10 @@ void ClampSizeOfSwapchainImages(u32 x, u32 y)
 
 void CreateSwapchain(VkSwapchainKHR *Swapchain, VkSwapchainKHR *OldSwapchain)
 {
+	if(*Swapchain)
+	{
+		Warn("CreateSwapchain: *Swapchain != VK_NULL_HANDLE");
+	}
 	VkSwapchainCreateInfoKHR SwapchainCI;
 	SwapchainCI.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	SwapchainCI.pNext = NULL;
@@ -821,6 +825,27 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 }
 
 //NOTE(Kyryl):
+//These tiny allocators are designed for permanent objects.
+//Incompatible with SGM, use .Offset member in struct to keep
+//track of position. 
+u8 *VboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+{
+	*Offset = VertexBuffers[BufIndex].Offset;
+	u8 *Data = (u8*)VertexBuffers[BufIndex].Data + *Offset;
+	VertexBuffers[BufIndex].Offset += Size;
+	return Data;
+}
+
+u8 *IboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+{
+	Size = (Size + (sizeof(u32)-1)) & -sizeof(u32);
+	*Offset = IndexBuffers[BufIndex].Offset;
+	u8 *Data = (u8*)IndexBuffers[BufIndex].Data + *Offset;
+	IndexBuffers[BufIndex].Offset += Size;
+	return Data;
+}
+
+//NOTE(Kyryl):
 //There will be one huge buffer, so in theory this function
 //should be called only once, but may be used in case of scarcity
 void *VboMalloc(u32 Size, VkBuffer *Buffer)
@@ -942,7 +967,7 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 	if (Extra > MINFRAGMENT)
 	{
 		// there will be a free fragment after the allocated block
-		Newblock = (memblock_t *) ((unsigned char *)Base + Size );
+		Newblock = (memblock_t *) ((u8*)Base + Size );
 		Newblock->Size = Extra;
 		Newblock->Tag = 0;			// free block
 		Newblock->Prev = Base;
@@ -962,10 +987,10 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 #ifdef TINYENGINE_DEBUG
 	// marker for memory trash testing
 	Base->Id = ZONEID;
-	*(int *)((unsigned char *)Base + Base->Size - sizeof(s32)) = ZONEID;
+	*(int *)((u8*)Base + Base->Size - sizeof(s32)) = ZONEID;
 #endif
 
-	return (void *) ((unsigned char *)Base + sizeof(memblock_t));
+	return (void *) ((u8 *)Base + sizeof(memblock_t));
 }
 
 void ZFree(void *Ptr, u8 Zoneid)
@@ -1024,7 +1049,7 @@ void *ZRealloc(void *Ptr, int Size, u8 Zoneid)
 	{
 		return ZMalloc (Size, Zoneid);
 	}
-	Block = (memblock_t *) ((unsigned char *) Ptr - sizeof (memblock_t));
+	Block = (memblock_t *) ((u8 *) Ptr - sizeof (memblock_t));
 	
 #ifdef TINYENGINE_DEBUG
 	if (Block->Id != ZONEID)
@@ -1068,7 +1093,7 @@ void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
 // set the entire zone to one free block
 
 	Zone->Blocklist.Next = Zone->Blocklist.Prev = Block =
-	                           (memblock_t *)( (unsigned char *)Zone + sizeof(memzone_t) );
+	                           (memblock_t *)( (u8 *)Zone + sizeof(memzone_t) );
 	Zone->Blocklist.Tag = 1; // in use block
 #ifdef TINYENGINE_DEBUG
 	Zone->Blocklist.Id = 0;
@@ -1394,6 +1419,9 @@ void RebuildRenderer()
 	{
 		return; //if window is minimized.
 	}
+
+	VkSwapchains[1] = VkSwapchains[0];
+	VkSwapchains[0] = VK_NULL_HANDLE;
 
     	CreateSwapchain(&VkSwapchains[0], &VkSwapchains[1]);
 
@@ -1868,15 +1896,15 @@ out:;
 	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
 
 	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
-	VertexBuffers[0].Offset = 0;
 	//Note(Kyryl): vertex buffers require no alignment.
 	ZInitZone(VertexBuffers[0].Data, 20480, 1, 1);
+	VertexBuffers[0].Offset = 0;
 
 	IndexBuffers[0].Data = IboMalloc(20480, &IndexBuffers[0].Buffer);
-	IndexBuffers[0].Offset = 0;
 	// Align to 4 bytes because we allocate both uint16 and uint32
 	// index buffers and alignment must match index size
 	ZInitZone(IndexBuffers[0].Data, 20480, 4, 2);
+	IndexBuffers[0].Offset = 0; //will not be used, managed by SGM
 	//End MEMORY
 
 	//DEPTH BUFFER
@@ -2118,7 +2146,7 @@ wait:
 	Viewport.x = 0;
 	Viewport.y = 0;
 	Viewport.width = SwchImageSize.width;
-	Viewport.width = SwchImageSize.height;
+	Viewport.height = SwchImageSize.height;
 	Viewport.minDepth = 0;
 	Viewport.maxDepth = 1;
 
@@ -2160,21 +2188,19 @@ void VkEndRendering()
 
 void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer)
 {
-	unsigned char *Verts = (unsigned char*) ZMalloc(VertexCount*sizeof(Vertex), 1);	
-	unsigned char *Index = (unsigned char*) ZMalloc(IndexCount*sizeof(u32), 2);	
+	u8 *Verts = (u8*) ZMalloc(VertexCount*sizeof(Vertex), 1);	
+	u8 *Index = (u8*) ZMalloc(IndexCount*sizeof(u32), 2);	
+	VkDeviceSize VOffset = Verts - (u8*) VertexBuffers[0].Data;
+	VkDeviceSize IOffset = Index - (u8*) IndexBuffers[0].Data;
 	memcpy(Verts, &VertexBuffer[0], VertexCount*sizeof(Vertex));
 	memcpy(Index, &IndexBuffer[0], IndexCount*sizeof(u32));
-	vkCmdBindVertexBuffers(VkCommandBuffers[0], 0, 1, &VertexBuffers[0].Buffer, (VkDeviceSize*)&VertexBuffers[0].Offset);
-	vkCmdBindIndexBuffer(VkCommandBuffers[0], IndexBuffers[0].Buffer, (VkDeviceSize)IndexBuffers[0].Offset, VK_INDEX_TYPE_UINT32);
+	vkCmdBindVertexBuffers(VkCommandBuffers[0], 0, 1, &VertexBuffers[0].Buffer, &VOffset);
+	vkCmdBindIndexBuffer(VkCommandBuffers[0], IndexBuffers[0].Buffer, IOffset, VK_INDEX_TYPE_UINT32);
 	vkCmdBindPipeline(VkCommandBuffers[0], VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
 	vkCmdDrawIndexed(VkCommandBuffers[0], IndexCount, 1, 0, 0, 0);
 
-	//TODO(Kyryl):
-	//Compute these offsets correctly, currently this does not work.
 
-	VertexBuffers[0].Offset += VertexCount*sizeof(Vertex);
-	IndexBuffers[0].Offset += IndexCount*sizeof(u32);
-	ZFree(Verts, 1);
+	ZFree(Verts, 1); 
 	ZFree(Index, 2);
 }
 
