@@ -30,10 +30,10 @@ Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
     return(HasRemainingData);
 }
 
-b32 KeyboardButtonState[TINY_EVENT_MAX_KEYS]; // NOTE: true == IsDown
-tiny_digital_button Keyboard[TINY_EVENT_MAX_KEYS];
-b32 MouseButtonState[TINY_EVENT_MAX_MOUSE_BUTTONS]; // NOTE: true == IsDown
-tiny_digital_button Mouse[TINY_EVENT_MAX_MOUSE_BUTTONS];
+b32 KeyboardButtonState[KEY_COUNT]; // NOTE: true == IsDown
+tiny_digital_button Keyboard[KEY_COUNT];
+b32 MouseButtonState[MOUSE_COUNT]; // NOTE: true == IsDown
+tiny_digital_button Mouse[MOUSE_COUNT];
 
 static void
 Tiny_Update(tiny_platform *Platform)
@@ -63,13 +63,13 @@ Tiny_Update(tiny_platform *Platform)
         }
 
         // Update Keyboard based on KeyboardState
-        for(int InputIndex = 0; InputIndex < TINY_EVENT_MAX_KEYS; ++InputIndex)
+        for(int InputIndex = 0; InputIndex < KEY_COUNT; ++InputIndex)
         {
             Tiny_ProcessDigitalButton(&Keyboard[InputIndex], KeyboardButtonState[InputIndex]);
         }
 
         // Update Mouse based on MouseButtonState
-        for(int InputIndex = 0; InputIndex < TINY_EVENT_MAX_MOUSE_BUTTONS; ++InputIndex)
+        for(int InputIndex = 0; InputIndex < MOUSE_COUNT; ++InputIndex)
         {
             Tiny_ProcessDigitalButton(&Mouse[InputIndex], MouseButtonState[InputIndex]);
         }

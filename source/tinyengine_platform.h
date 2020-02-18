@@ -3,7 +3,7 @@
 
 typedef enum tiny_event_type
 {
-    TINY_EVENT_TYPE_KEYBOARD = 1,
+    TINY_EVENT_TYPE_KEYBOARD = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     TINY_EVENT_TYPE_MOUSE,  
 } tiny_event_type;
 
@@ -14,12 +14,14 @@ typedef enum tiny_event_mouse_button
     MOUSE_RIGHT,
     MOUSE_EXTRA1,
     MOUSE_EXTRA2,
+
+    MOUSE_COUNT,
 } tiny_event_mouse_button;
 
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
 typedef enum tiny_event_key_type
 {
-    KEY_A = 1,
+    KEY_A = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     KEY_B,
     KEY_C,
     KEY_D,
@@ -211,6 +213,8 @@ typedef enum tiny_event_key_type
     KEY_ZOOM,
     KEY_NONAME,
     KEY_PA1,
+
+    KEY_COUNT,
 } tiny_event_key_type;
 
 typedef struct tiny_event_keyboard
@@ -222,7 +226,7 @@ typedef struct tiny_event_keyboard
 // TODO(hayden): Preface with TINY_EVENT or not?
 typedef enum tiny_event_mouse_event_type
 {
-    TINY_EVENT_MOUSE_MOVE = 1,
+    TINY_EVENT_MOUSE_MOVE = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     TINY_EVENT_MOUSE_CLICK,
 } tiny_event_mouse_event_type;
 
@@ -270,9 +274,6 @@ typedef struct tiny_platform
 } tiny_platform;
 
 tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform layer?
-
-#define TINY_EVENT_MAX_KEYS (163+55) // NOTE(hayden): enum offset
-#define TINY_EVENT_MAX_MOUSE_BUTTONS (5+1) // NOTE(hayden): enum offset
 
 //////
 

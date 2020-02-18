@@ -21,8 +21,6 @@
 
 #include "tinyengine.c"
 
-#define NUM_RAW_INPUT_DEVICES 2 // NOTE(hayden): Keyboard & Mouse -- TODO(hayden): Gamepad (PS3)
-
 static b32 IsRunning;
 static ID3D11Device *Device;
 static ID3D11DeviceContext *DeviceContext;
@@ -1097,7 +1095,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         if(Window != INVALID_HANDLE_VALUE)
         {
             // Input
-            RAWINPUTDEVICE RawInputDevices[NUM_RAW_INPUT_DEVICES];
+            RAWINPUTDEVICE RawInputDevices[2]; // TODO(hayden): Joystick
             { 
                 // Mouse
                 RawInputDevices[0].usUsagePage = 0x01;
@@ -1112,7 +1110,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[1].hwndTarget = Window;
             }
 
-            if(RegisterRawInputDevices(RawInputDevices, NUM_RAW_INPUT_DEVICES, sizeof(RAWINPUTDEVICE)))
+            if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
             {
                 if(Win32InitD3D11(Window))
                 {
