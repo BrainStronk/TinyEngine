@@ -11,6 +11,6 @@ IF NOT EXIST ..\build mkdir ..\build
 
 pushd ..\build
 
-cl -nologo -FC -Zi ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib
+cl -nologo -FC -Zi -DTINY_ENGINE_DEBUG ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib
 
 popd
