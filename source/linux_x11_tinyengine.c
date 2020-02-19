@@ -144,7 +144,6 @@ void ProcessEvents()
 				break;
 		}
 	}
-	return arg;
 }
 
 int main(int argc, char** argv)

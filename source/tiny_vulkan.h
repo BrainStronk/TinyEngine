@@ -675,32 +675,48 @@ VkDeviceMemory DepthBufferMemory;
 VkFormat DepthFormat;
 
 //MEMORY
-#define NUM_MAXALLOC_VBO 100
+//NOTE(Kyryl):
+//These structures are conceptually similar but ---
+//I want to separate then with an emphasis, to prevent misuse
+//And in case of inside allocators multithread, should be no issues.
 #define NUM_VBO_BUFFERS 10
-#define NUM_MAXALLOC_IBO 100
 #define NUM_IBO_BUFFERS 10
+#define NUM_UBO_BUFFERS 10
 //----------------------------------------------------
 VkPhysicalDeviceMemoryProperties DeviceMemoryProperties;
 
 u32 VboAllocCount;
-VkDeviceMemory VboDeviceMemory[NUM_MAXALLOC_VBO];
 typedef struct vbo_t
 {
 	VkBuffer Buffer;
+	VkDeviceMemory DeviceMemory;
+	u32 Size;
 	u32 Offset;
 	void *Data;
 }vbo_t;
 vbo_t VertexBuffers[NUM_VBO_BUFFERS];
 
 u32 IboAllocCount;
-VkDeviceMemory IboDeviceMemory[NUM_MAXALLOC_IBO];
 typedef struct ibo_t
 {
 	VkBuffer Buffer;
+	VkDeviceMemory DeviceMemory;
+	u32 Size;
 	u32 Offset;
 	void *Data;
 }ibo_t;
 ibo_t IndexBuffers[NUM_IBO_BUFFERS];
+
+u32 UboAllocCount;
+typedef struct ubo_t
+{
+	VkBuffer Buffer;
+	VkDeviceMemory DeviceMemory;
+	u32 Size;
+	u32 Offset;
+	void *Data;
+}ubo_t;
+ubo_t UniformBuffers[NUM_UBO_BUFFERS];
 
 //INTERNAL SEGMENTED MEMORY MANAGER
 #define	ZONEID	0x1d4a11
@@ -724,7 +740,7 @@ typedef struct
 	memblock_t *Rover;
 } memzone_t;
 
-memzone_t *Mainzone[3];
+memzone_t *Mainzone[10];
 //------------------------------SGM
 
 //--------------------------------------MEMORY
@@ -1026,6 +1042,7 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 u8 *VboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	*Offset = VertexBuffers[BufIndex].Offset;
+	ASSERT(*Offset + Size < VertexBuffers[BufIndex].Size, "VboDigress: out of memory");
 	u8 *Data = (u8*)VertexBuffers[BufIndex].Data + *Offset;
 	VertexBuffers[BufIndex].Offset += Size;
 	return Data;
@@ -1035,24 +1052,32 @@ u8 *IboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	Size = (Size + (sizeof(u32)-1)) & -sizeof(u32);
 	*Offset = IndexBuffers[BufIndex].Offset;
+	ASSERT(*Offset + Size < IndexBuffers[BufIndex].Size, "IboDigress: out of memory");
 	u8 *Data = (u8*)IndexBuffers[BufIndex].Data + *Offset;
 	IndexBuffers[BufIndex].Offset += Size;
 	return Data;
 }
 
+u8 *UboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+{
+	Size = (Size + (256-1)) & -256;
+	*Offset = UniformBuffers[BufIndex].Offset;
+	ASSERT(*Offset + Size < UniformBuffers[BufIndex].Size, "UboDigress: out of memory");
+	u8 *Data = (u8*)UniformBuffers[BufIndex].Data + *Offset;
+	UniformBuffers[BufIndex].Offset += Size;
+	return Data;
+}
 //NOTE(Kyryl):
 //There will be one huge buffer, so in theory this function
-//should be called only once, but may be used in case of scarcity
-void *VboMalloc(u32 Size, VkBuffer *Buffer)
+//should be called only once per memory type, but may be used in case of scarcity
+void *VkHostMalloc(u32 Size, VkBuffer *Buffer, VkDeviceMemory *DeviceMemory, VkBufferUsageFlagBits Usage)
 {
-	ASSERT(VboAllocCount < NUM_MAXALLOC_VBO, "VBO MAXALLOC");
-
 	VkBufferCreateInfo BufferCI;
 	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	BufferCI.pNext = NULL;
 	BufferCI.flags = 0;
 	BufferCI.size = Size;
-	BufferCI.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+	BufferCI.usage = Usage;
 	BufferCI.sharingMode = 0;
 	BufferCI.queueFamilyIndexCount = 0;
 	BufferCI.pQueueFamilyIndices = NULL;
@@ -1073,56 +1098,32 @@ void *VboMalloc(u32 Size, VkBuffer *Buffer)
 	MemoryAI.allocationSize = AlignedSize;
 	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 
-	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &VboDeviceMemory[VboAllocCount]), "vkAllocateMemory failed!");
+	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, DeviceMemory), "vkAllocateMemory failed!");
 
-	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *Buffer, VboDeviceMemory[VboAllocCount], 0), "vkBindBufferMemory failed!");
+	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *Buffer, *DeviceMemory, 0), "vkBindBufferMemory failed!");
 
 	void *Data;
-	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
+	VK_MCHECK(vkMapMemory(LogicalDevice, *DeviceMemory, 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
 
-	VboAllocCount++;
 	return Data;
 }
 
-void *IboMalloc(u32 Size, VkBuffer *Buffer)
+//NOTE(Kyryl):
+//This memory resides in dedicated graphics card and can't be mapped.
+//Meaning we can't get direct cpu pointer to it's contents, but we can
+//Get vulkan handle and use vulkan commands to operate on it.
+//TODO: Do this properly. Make structure and heap where these things are stored.
+void VkDeviceMalloc(u32 Size, VkDeviceMemory *DeviceMemory)
 {
-	ASSERT(VboAllocCount < NUM_MAXALLOC_IBO, "IBO MAXALLOC");
-
-	VkBufferCreateInfo BufferCI;
-	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	BufferCI.pNext = NULL;
-	BufferCI.flags = 0;
-	BufferCI.size = Size;
-	BufferCI.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-	BufferCI.sharingMode = 0;
-	BufferCI.queueFamilyIndexCount = 0;
-	BufferCI.pQueueFamilyIndices = NULL;
-
-	VK_MCHECK(vkCreateBuffer(LogicalDevice, &BufferCI, VkAllocators, Buffer), "vkCreateBuffer failed!");
-
 	VkMemoryRequirements MemoryRequirements;
-	vkGetBufferMemoryRequirements(LogicalDevice, *Buffer, &MemoryRequirements);
-
-	s32 AlignMod = MemoryRequirements.size % MemoryRequirements.alignment;
-	s32 AlignedSize = ((MemoryRequirements.size % MemoryRequirements.alignment) == 0)
-	                         ? MemoryRequirements.size
-	                         : (MemoryRequirements.size + MemoryRequirements.alignment - AlignMod);
 
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	MemoryAI.pNext = NULL;
-	MemoryAI.allocationSize = AlignedSize;
-	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+	MemoryAI.allocationSize = Size;
+	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
 
-	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &VboDeviceMemory[VboAllocCount]), "vkAllocateMemory failed!");
-
-	VK_MCHECK(vkBindBufferMemory(LogicalDevice, *Buffer, VboDeviceMemory[VboAllocCount], 0), "vkBindBufferMemory failed!");
-
-	void *Data;
-	VK_MCHECK(vkMapMemory(LogicalDevice, VboDeviceMemory[VboAllocCount], 0, AlignedSize, 0, &Data),"vkMapMemory failed!");
-
-	IboAllocCount++;
-	return Data;
+	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, DeviceMemory), "vkAllocateMemory failed!");
 }
 
 void *ZMalloc(s32 Size, u8 Zoneid)
@@ -2111,16 +2112,21 @@ out:;
 	Trace("Reached target: Memory Init");
 	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
 
-	VertexBuffers[0].Data = VboMalloc(20480, &VertexBuffers[0].Buffer);
+	VertexBuffers[0].Size = 20480;
+	VertexBuffers[0].Data = VkHostMalloc(VertexBuffers[0].Size, &VertexBuffers[0].Buffer, &VertexBuffers[0].DeviceMemory, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT);
 	//Note(Kyryl): vertex buffers require no alignment.
-	ZInitZone(VertexBuffers[0].Data, 20480, 1, 1);
-	VertexBuffers[0].Offset = 0;
+	ZInitZone(VertexBuffers[0].Data, VertexBuffers[0].Size, 1, 1);
 
-	IndexBuffers[0].Data = IboMalloc(20480, &IndexBuffers[0].Buffer);
+	IndexBuffers[0].Size = 20480;
+	IndexBuffers[0].Data = VkHostMalloc(IndexBuffers[0].Size, &IndexBuffers[0].Buffer, &IndexBuffers[0].DeviceMemory, VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
 	// Align to 4 bytes because we allocate both uint16 and uint32
 	// index buffers and alignment must match index size
-	ZInitZone(IndexBuffers[0].Data, 20480, 4, 2);
-	IndexBuffers[0].Offset = 0; //will not be used, managed by SGM
+	ZInitZone(IndexBuffers[0].Data, IndexBuffers[0].Size, 4, 2);
+
+	UniformBuffers[0].Size = 20480;
+	UniformBuffers[0].Data = VkHostMalloc(UniformBuffers[0].Size, &UniformBuffers[0].Buffer, &UniformBuffers[0].DeviceMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
+	// Align to 256 bytes (ref spec)
+	ZInitZone(IndexBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
 	//End MEMORY
 
 	//DEPTH BUFFER
