@@ -50,17 +50,12 @@ void SurfaceCallback(VkSurfaceKHR* Surface)
 	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
 }
 
-#ifdef TINYENGINE_DEBUG
-#define DbgEvent Debug
-#else
-#define DbgEvent(...)
-#endif
 
-void* EventThread(void* arg)
+void ProcessEvents()
 {
 
 	XEvent Event;
-	while (1) 
+	while (XPending(Wnd.Display) > 0) 
 	{
 		//see https://tronche.com/gui/x/xlib/events/structures.html 
 		//NOTE(Kyryl): So the issue was that with validation layers enabled when resizing the window
@@ -70,8 +65,11 @@ void* EventThread(void* arg)
 		XNextEvent(Wnd.Display, &Event);
 		switch(Event.type)
 		{
-			//WTF idk what to do, some of these events are not even triggering on my system :(
-			//Probably has to do with Attr bitmask set during window creation.
+			#ifdef TINYENGINE_DEBUG
+			#define DbgEvent Debug
+			#else
+			#define DbgEvent(...)
+			#endif
 			case KeyPress:
 				DbgEvent("KeyPress");
 				break;
@@ -196,7 +194,6 @@ int main(int argc, char** argv)
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);
 	}
-//	dlclose(VulkanLoader);
 
 	XSelectInput(Wnd.Display, Wnd.Window, 
 			ExposureMask | KeyPressMask | KeyReleaseMask | PointerMotionMask |
@@ -208,11 +205,14 @@ int main(int argc, char** argv)
 	// Set window title
 	XStoreName(Wnd.Display, Wnd.Window, "TinyEngine");
 
-	pthread_t Ithread;
-	ASSERT(!pthread_create(&Ithread, NULL, &EventThread, NULL), "pthread: EventThread failed.");
+	//Maybe some day events will be threaded? 
+	//pthread_t Ithread;
+	//ASSERT(!pthread_create(&Ithread, NULL, &EventThread, NULL), "pthread: EventThread failed.");
 
 	while (1) 
 	{
+		ProcessEvents();
+
 		VkBeginRendering();
 
 		//DRAW commands go in between Begin and End respectively.

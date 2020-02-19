@@ -339,10 +339,6 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
-#ifdef HEX_SHADERS
-#include "Vbasic.h"
-#include "Fbasic.h"
-#endif
 
 //TINYVULKAN LOGGER.
 //TODO(Everyone):
@@ -2216,6 +2212,8 @@ out:;
 	//TODO:Implement pipeline cache.
 
 #ifdef HEX_SHADERS
+#include "Vbasic.h"
+#include "Fbasic.h"
 	LoadHexShader(Vbasic, ArrayCount(Vbasic)*sizeof(u32));
 	LoadHexShader(Fbasic, ArrayCount(Fbasic)*sizeof(u32));
 #else
