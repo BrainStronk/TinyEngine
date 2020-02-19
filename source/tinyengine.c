@@ -17,33 +17,30 @@ Tiny_ProcessDigitalButton(tiny_digital_button *Button, b32 WasDown)
     Button->Released = (Button->Up == 1);
 }
 
-static b32
+inline b32
 Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
 {
-    b32 HasRemainingData;
     static s32 CountUpToEventQueueIndex = 0;
 
     // Copy event over
     *Event = Platform->EventQueue[Platform->EventQueueIndex];
-    
-    // Clear the Platform's event
-    Platform->EventQueue[Platform->EventQueueIndex] = (tiny_event){0};
 
-    // If the event has a Type, assume there is remaining data
-    HasRemainingData = Event->Type;
+    // Copy over event type as boolean value (will always be > 0 if there is an event)
+    b32 State = Event->Type;
 
     // First In, First Out
-    if(CountUpToEventQueueIndex == Platform->EventQueueIndex)
+    if(CountUpToEventQueueIndex > Platform->EventQueueIndex)
     {
         Platform->EventQueueIndex = 0;
         CountUpToEventQueueIndex = 0;
+        State = false; // Do not handle this event
     }
     else
     {
         ++CountUpToEventQueueIndex;
     }
 
-    return(HasRemainingData);
+    return(State);
 }
 
 b32 KeyboardButtonState[KEY_COUNT];
@@ -78,6 +75,7 @@ Tiny_Update(tiny_platform *Platform)
             }
         }
 
+
         // Update Keyboard based on KeyboardState
         for(int InputIndex = 0; InputIndex < KEY_COUNT; ++InputIndex)
         {
@@ -89,6 +87,7 @@ Tiny_Update(tiny_platform *Platform)
         {
             Tiny_ProcessDigitalButton(&Mouse[InputIndex], MouseButtonState[InputIndex]);
         }
+        Win32PrintDebugString("%d\n", Keyboard[KEY_A].Pressed);
     }
 }
 

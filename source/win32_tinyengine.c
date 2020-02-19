@@ -16,7 +16,7 @@
 #endif
 #include "stb_sprintf.h"
 
-#include "tinyengine.c"
+#include "tinyengine.h"
 
 static b32 IsRunning;
 static ID3D11Device *Device;
@@ -42,6 +42,7 @@ Win32PrintDebugString(char* Format, ...)
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
 }
+#include "tinyengine.c"
 
 typedef struct win32_audio_thread_params
 {
@@ -316,20 +317,21 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
         case WM_INPUT:
         {
-            UINT SizeOfBuffer = sizeof(RAWINPUT);
-            char Data[sizeof(RAWINPUT)] = {0};
+            UINT SizeOfBuffer;
+            GetRawInputData((HRAWINPUT)LParam, RID_INPUT, NULL, &SizeOfBuffer, sizeof(RAWINPUTHEADER));
+            HANDLE Heap = GetProcessHeap();
+            LPBYTE Data = (LPBYTE)HeapAlloc(Heap, 0, SizeOfBuffer);
+            
             if(GetRawInputData((HRAWINPUT)LParam, RID_INPUT, Data, &SizeOfBuffer, sizeof(RAWINPUTHEADER)) <= SizeOfBuffer)
             {
                 RAWINPUT *RawInput = (RAWINPUT *)Data;
 
+                tiny_event Event = {0};
                 if(RawInput->header.dwType == RIM_TYPEMOUSE)
                 {
                     // Mouse Buttons & Wheel
-                    tiny_event Event = {0};
                     Event.Type = TINY_EVENT_TYPE_MOUSE;
                     Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
-                    Event.Mouse.Button = false;
-                    Event.Mouse.IsDown = false;
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -554,7 +556,6 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
                         b32 IsDown = !(Flags & RI_KEY_BREAK);
 
-                        tiny_event Event = {0};
                         Event.Type = TINY_EVENT_TYPE_KEYBOARD;
                         Event.Keyboard.IsDown = IsDown;
                         Event.Keyboard.KeyType = false;
@@ -567,6 +568,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = (VKIndex - 'A') + KEY_A;
+                                    break;
                                 }
                             }
                         }
@@ -578,6 +580,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - ('0' - Offset);
+                                    break;
                                 }
                             }
                         }
@@ -589,6 +592,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_NUMPAD0-Offset);
+                                    break;
                                 }
                             }
                         }
@@ -600,6 +604,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_F1-Offset);
+                                    break;
                                 }
                             }
                         }
@@ -611,6 +616,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_LEFT-Offset);
+                                    break;
                                 }
                             }
                         }
@@ -1043,6 +1049,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         //GetKeyNameTextW((LONG)Key, Buffer, 512);
                     }
                 }
+                else if(RawInput->header.dwType == RIM_TYPEHID)
+                {
+                    // TODO(hayden): Controller/Joystick stuff!
+                }
             }
         } break;
 
@@ -1092,7 +1102,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         if(Window != INVALID_HANDLE_VALUE)
         {
             // Input
-            RAWINPUTDEVICE RawInputDevices[3]; // TODO(hayden): Joystick
+            RAWINPUTDEVICE RawInputDevices[4]; // TODO(hayden): Joystick
             { 
                 // Mouse
                 RawInputDevices[0].usUsagePage = 0x01;
@@ -1106,11 +1116,17 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[1].dwFlags = RIDEV_NOLEGACY;
                 RawInputDevices[1].hwndTarget = Window;
 
-                // Joystick
+                // TODO(hayden): Joystick
                 RawInputDevices[2].usUsagePage = 0x01;
                 RawInputDevices[2].usUsage = 0x04;
                 RawInputDevices[2].dwFlags = 0;
                 RawInputDevices[2].hwndTarget = Window;
+
+                // TODO(hayden): Gamepad
+                RawInputDevices[3].usUsagePage = 0x01;
+                RawInputDevices[3].usUsage = 0x05;
+                RawInputDevices[3].dwFlags = 0;
+                RawInputDevices[3].hwndTarget = Window;
             }
 
             if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
