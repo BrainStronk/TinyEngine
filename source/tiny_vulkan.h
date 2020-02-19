@@ -587,11 +587,17 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 	do {\
 		ASSERT(call == VK_SUCCESS,"VK_MCHECK: %s | %s", GetVulkanResultString(call), message);\
 	} while (false)
-
 #else
-#define ASSERT(condition, message, ...)
-#define VK_CHECK(call)
+//NOTE(Kyryl): 
+//VK_CHECK has to exist, even when debug disabled because compiler will remove the
+//underlying calls assuming they have no effect, but this is wrong. So just setting a dummy variable
+//prevents compiler from getting rid of any function that was placed inside the macro
+//like so: VK_CHECK(VeriCoolFunc());
+#define ASSERT(condition, message, ...){char* a = message;};
+#define VK_CHECK(call){VkResult a = call;};
+#define VK_MCHECK(call, message){VkResult a = call;};
 #endif
+
 
 //VULKAN GLOBALS
 //-----------------------------------------------------
@@ -599,7 +605,6 @@ void log_log(int level, const char *file, int line, const char *fmt, ...)
 //UNCATEGORIZED VARS
 #define MAX_FRAMES_IN_FLIGHT 5 //must be less than num Semaphores, Fences. 
 //-----------------------------------------------------
-void (*VkSurfaceCallback)(VkSurfaceKHR*); //The only interface with outside world.
 VkAllocationCallbacks Allocator;
 VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
@@ -821,25 +826,6 @@ void SetSizeOfSwapchainImages(u32 x, u32 y)
 	SwchImageSize.height = y;
 }
 
-void ClampSizeOfSwapchainImages(u32 x, u32 y)
-{
-	if( x < SurfaceCapabilities.minImageExtent.width )
-	{
-		SwchImageSize.width = SurfaceCapabilities.minImageExtent.width;
-	}
-	else if( x > SurfaceCapabilities.maxImageExtent.width )
-	{
-		SwchImageSize.width = SurfaceCapabilities.maxImageExtent.width;
-	}
-	if( y < SurfaceCapabilities.minImageExtent.height )
-	{
-		SwchImageSize.height = SurfaceCapabilities.minImageExtent.height;
-	}
-	else if( y > SurfaceCapabilities.maxImageExtent.height )
-	{
-		SwchImageSize.height = SurfaceCapabilities.maxImageExtent.height;
-	}
-}
 
 void CreateSwapchain(VkSwapchainKHR *Swapchain, VkSwapchainKHR *OldSwapchain)
 {
@@ -1640,7 +1626,7 @@ void RebuildRenderer()
 	VK_CHECK(vkDeviceWaitIdle(LogicalDevice));
 
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GpuDevice, VkSurface, &SurfaceCapabilities));
-	ClampSizeOfSwapchainImages(SwchImageSize.width, SwchImageSize.height);
+	SwchImageSize = SurfaceCapabilities.currentExtent;
 
 	if(SwchImageSize.width == 0 || SwchImageSize.height == 0)
 	{
@@ -1687,7 +1673,6 @@ b32 InitVulkan(PFN_vkGetInstanceProcAddr *GetProcAddr, void(SurfaceCallback(VkSu
 		return false;
 	}
 	vkGetInstanceProcAddr = *GetProcAddr;
-	VkSurfaceCallback = SurfaceCallback;
 
 	#define GLOBAL_LEVEL_VULKAN_FUNCTION( name )				\
     	name = (PFN_##name) (vkGetInstanceProcAddr(NULL, #name));	\
@@ -1855,7 +1840,6 @@ _continue:;
 	//Surface 
 	//Is created via platform layer callback.
 	SurfaceCallback(&VkSurface); 
-	ASSERT(SwchImageSize.width, "Please call SetSizeOfSwapchainImages in SurfaceCallback before attempting init.");
 
 	u32 ModesCount = 0;
 	VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(GpuDevice, VkSurface, &ModesCount, NULL));
@@ -1877,7 +1861,7 @@ _continue:;
 
 	//NOTE(Kyryl): This is necessary for swapchain resize.
 	VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(GpuDevice, VkSurface, &SurfaceCapabilities));
-	ClampSizeOfSwapchainImages(SwchImageSize.width, SwchImageSize.height);
+	SwchImageSize = SurfaceCapabilities.currentExtent;
 	//End Surface
 
 	//Vulkan Queue init. 
@@ -2346,7 +2330,6 @@ wait:
 		goto wait;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		Info("VkBeginRendering: VK_ERROR_OUT_OF_DATE_KHR");
-		VkSurfaceCallback(NULL);
 		RebuildRenderer();
 		goto wait;
 	default:
@@ -2428,7 +2411,6 @@ void VkEndRendering()
 		return;
 	case VK_ERROR_OUT_OF_DATE_KHR:
 		Info("VkEndRendering: VK_ERROR_OUT_OF_DATE_KHR");
-		VkSurfaceCallback(NULL);
 		RebuildRenderer();
 		return; 
 	default:
