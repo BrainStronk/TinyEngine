@@ -12,6 +12,49 @@
 #include <dlfcn.h>
 
 #include "tinyengine.h"
+
+#define VK_NO_PROTOTYPES
+#include "vulkan_core.h"
+
+void SurfaceCallback(VkSurfaceKHR* Surface);
+
+enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL, T_LOG };
+b32 LogNewLine = true;
+b32 LogExtra = true;
+FILE *Logfp;
+s32 LogLevel;
+s32 LogQuiet;
+
+void LogLog(int level, const char *file, int line, const char *fmt, ...);
+void FormatString(char* Buf, char* Str, ...);
+void LogSetLevel(s32 Level);
+void LogSetfp(FILE *Fp);
+
+//(Kyryl): This log does not care about debug level set.
+//useful to do fast print debugging, p(...) is nice and short
+//do not leave hanging in production code though.
+#define p(...) LogLog(T_LOG, __FILE__, __LINE__, __VA_ARGS__)
+
+#ifdef TINYENGINE_DEBUG
+
+#define Trace(...) LogLog(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define Debug(...) LogLog(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+#define Info(...)  LogLog(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
+#define Warn(...)  LogLog(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
+#define Error(...) LogLog(LOG_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define Fatal(...) LogLog(LOG_FATAL, __FILE__, __LINE__, __VA_ARGS__)
+
+#else
+
+#define Trace(...)
+#define Debug(...)
+#define Info(...)
+#define Warn(...)
+#define Error(...)
+#define Fatal(...)
+
+#endif
+
 #include "tiny_vulkan.h"
 
 static const char *level_names[] =
