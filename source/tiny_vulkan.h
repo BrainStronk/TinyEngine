@@ -339,9 +339,6 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 
 
 //TINYVULKAN LOGGER.
-//TODO(Everyone):
-//Until there is a proper unified interface this logger code will stay here
-//But in the future should be put in platform layer.
 
 #ifndef STB_SPRINTF_IMPLEMENTATION
 #define STB_SPRINTF_IMPLEMENTATION
@@ -358,34 +355,6 @@ void PostInit();
 
 
 #ifdef TINYENGINE_DEBUG
-#   define ASSERT(condition, message, ...) \
-	do { \
-		if (! (condition)) \
-		{ \
-			Fatal(message, ##__VA_ARGS__);\
-			FILE *File = fopen(__FILE__, "r");\
-			if(File)\
-			{\
-				int count = 0;\
-				char line[1024];\
-				LogNewLine = false;\
-				LogExtra = false;\
-				while(fgets(line, 1024, File)) \
-				{\
-					count++;\
-					if(count >= (__LINE__ - 5) && count <= (__LINE__ + 5))\
-					{ Trace("%d %s", count, &line[0]);}\
-				}\
-			}\
-			LogExtra = true;\
-			LogNewLine = true;\
-			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
-			u8 Buf[10];					\
-			fgets(Buf, 10, stdin); \
-			exit(1); \
-		} \
-	} while (false)
-
 #define VK_CHECK(call)\
 	do {\
 		ASSERT(call == VK_SUCCESS,"VK_CHECK: %s", GetVulkanResultString(call));\
@@ -401,7 +370,6 @@ void PostInit();
 //underlying calls assuming they have no effect, but this is wrong. So just setting a dummy variable
 //prevents compiler from getting rid of any function that was placed inside the macro
 //like so: VK_CHECK(VeriCoolFunc());
-#define ASSERT(condition, message, ...){char* a = message;};
 #define VK_CHECK(call){VkResult a = call;};
 #define VK_MCHECK(call, message){VkResult a = call;};
 #endif
@@ -782,11 +750,11 @@ void CreateDepthBuffer()
 	VkMemoryRequirements MemoryRequirements;
 	vkGetImageMemoryRequirements(LogicalDevice, DepthBuffer, &MemoryRequirements);
 
-	VkMemoryDedicatedAllocateInfoKHR DedicatedAI;
-	DedicatedAI.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR;
-	DedicatedAI.pNext = NULL;
-	DedicatedAI.image = DepthBuffer;
-	DedicatedAI.buffer = VK_NULL_HANDLE;
+//	VkMemoryDedicatedAllocateInfoKHR DedicatedAI;
+//	DedicatedAI.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR;
+//	DedicatedAI.pNext = NULL;
+//	DedicatedAI.image = DepthBuffer;
+//	DedicatedAI.buffer = VK_NULL_HANDLE;
 
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -927,7 +895,7 @@ void *VkHostMalloc(u32 Size, VkBuffer *Buffer, VkDeviceMemory *DeviceMemory, VkB
 //TODO: Do this properly. Make structure and heap where these things are stored.
 void VkDeviceMalloc(u32 Size, VkDeviceMemory *DeviceMemory)
 {
-	VkMemoryRequirements MemoryRequirements;
+	VkMemoryRequirements MemoryRequirements = {0};
 
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -1150,7 +1118,6 @@ void LoadShader(const char* Path)
 	fseek(File, 0, SEEK_SET);
 
 	char *Buffer[Length];
-	ASSERT(Buffer,"");
 
 	u32 rc = fread(Buffer, 1, Length, File);
 	ASSERT(rc == (u32)Length, "Failed to read");
@@ -1705,7 +1672,7 @@ _continue:;
 	//objects from single GpuDevice. Probably the most used object in Vulkan.
 
 	const char *DeviceExtensions[] = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-	for(int c = 0; c < ArrayCount(DeviceExtensions); c++)
+	for(u32 c = 0; c < ArrayCount(DeviceExtensions); c++)
 	{
 		for(i = 0; i < DeviceExtPropCount; i++)
 		{
@@ -1798,7 +1765,7 @@ __continue:;
 	ASSERT(TmpImageUsage == SwchImageUsage, "Swapchain images do not support Color | Transfer Attachments");
 
 	SwchTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-	if(!SurfaceCapabilities.supportedTransforms & SwchTransform)
+	if(!(SurfaceCapabilities.supportedTransforms & SwchTransform))
 	{
 		SwchTransform = SurfaceCapabilities.currentTransform;
 	}

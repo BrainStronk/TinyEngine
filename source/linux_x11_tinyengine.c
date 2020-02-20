@@ -37,6 +37,36 @@ void LogSetfp(FILE *Fp);
 
 #ifdef TINYENGINE_DEBUG
 
+
+#define ASSERT(condition, message, ...) \
+	do { \
+		if (! (condition)) \
+		{ \
+			Fatal(message, ##__VA_ARGS__);\
+			FILE *File = fopen(__FILE__, "r");\
+			if(File)\
+			{\
+				int count = 0;\
+				char line[1024];\
+				LogNewLine = false;\
+				LogExtra = false;\
+				while(fgets(line, 1024, File)) \
+				{\
+					count++;\
+					if(count >= (__LINE__ - 5) && count <= (__LINE__ + 5))\
+					{ Trace("%d %s", count, &line[0]);}\
+				}\
+			}\
+			LogExtra = true;\
+			LogNewLine = true;\
+			Fatal("Assertion %s failed in, %s line: %d ", #condition, __FILE__, __LINE__);\
+			char Buf[10];					\
+			fgets(Buf, 10, stdin); \
+			exit(1); \
+		} \
+	} while (false)
+
+
 #define Trace(...) LogLog(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
 #define Debug(...) LogLog(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
 #define Info(...)  LogLog(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
@@ -46,6 +76,7 @@ void LogSetfp(FILE *Fp);
 
 #else
 
+#define ASSERT(condition, message, ...)
 #define Trace(...)
 #define Debug(...)
 #define Info(...)
@@ -101,7 +132,7 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 
 	Lock = 1;
 
-	s8 Buffer[1024];
+	char Buffer[1024];
 
 	/* Get current time */
 	time_t t = time(NULL);
