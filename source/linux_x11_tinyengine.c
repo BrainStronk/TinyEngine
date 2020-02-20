@@ -113,7 +113,7 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 		va_list args;
 		if(LogExtra)
 		{
-			char buf[16];
+			char buf[16] = {0};
 			buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
 #ifdef LOG_USE_COLOR
 			FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
@@ -144,7 +144,7 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 		va_list args;
 		if(LogExtra)
 		{
-			char buf[32];
+			char buf[32] = {0};
 			buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
 			FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[Level], File, Line);
 			fputs(buf, Logfp);
