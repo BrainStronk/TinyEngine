@@ -33,6 +33,9 @@ typedef float f64;
 #define Assert(Expression)
 #endif
 
+#define	Min(a, b)(((a) < (b)) ? (a) : (b))
+#define	Max(a, b)(((a) > (b)) ? (a) : (b))
+
 // P L A T F O R M ///////////////////////////////////////////////////
 
 typedef enum tiny_event_type
@@ -308,5 +311,59 @@ typedef struct tiny_platform
 } tiny_platform;
 
 tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
+
+//NOTE(Kyryl):
+//This will act as a Gateway between platform and any 
+//Platform independent code, helps to resolve linking symbols 
+//that reside in platform but needed in anywhere else.
+//For example, tiny_vulkan.h requires function LogLog,
+//the platform implementation for LogLog resides in linux_x11_tinyengine.c
+//this will let compiler know that LogLog exists and linker will search for it.
+//For the record, any interface should start itself with #include "tinyengine.h"
+//Else will have undefined symbols in files.
+//The init starts here.
+#ifdef LINUX_LEAN_AND_MEAN
+#define VK_NO_PROTOTYPES
+#include "vulkan_core.h"
+void SurfaceCallback(VkSurfaceKHR* Surface);
+
+enum { LOG_TRACE, LOG_DEBUG, LOG_INFO, LOG_WARN, LOG_ERROR, LOG_FATAL, T_LOG };
+b32 LogNewLine = true;
+b32 LogExtra = true;
+FILE *Logfp;
+s32 LogLevel;
+s32 LogQuiet;
+
+void LogLog(int level, const char *file, int line, const char *fmt, ...);
+void FormatString(char* Buf, char* Str, ...);
+void LogSetLevel(s32 Level);
+void LogSetfp(FILE *Fp);
+
+//(Kyryl): This log does not care about debug level set.
+//useful to do fast print debugging, p(...) is nice and short
+//do not leave hanging in production code though.
+#define p(...) LogLog(T_LOG, __FILE__, __LINE__, __VA_ARGS__)
+
+#ifdef TINYENGINE_DEBUG
+
+#define Trace(...) LogLog(LOG_TRACE, __FILE__, __LINE__, __VA_ARGS__)
+#define Debug(...) LogLog(LOG_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
+#define Info(...)  LogLog(LOG_INFO,  __FILE__, __LINE__, __VA_ARGS__)
+#define Warn(...)  LogLog(LOG_WARN,  __FILE__, __LINE__, __VA_ARGS__)
+#define Error(...) LogLog(LOG_ERROR, __FILE__, __LINE__, __VA_ARGS__)
+#define Fatal(...) LogLog(LOG_FATAL, __FILE__, __LINE__, __VA_ARGS__)
+
+#else
+
+#define Trace(...)
+#define Debug(...)
+#define Info(...)
+#define Warn(...)
+#define Error(...)
+#define Fatal(...)
+
+#endif
+
+#endif
 
 #endif // TINYENGINE_H

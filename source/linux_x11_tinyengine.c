@@ -14,6 +14,107 @@
 #include "tinyengine.h"
 #include "tiny_vulkan.h"
 
+static const char *level_names[] =
+{
+	"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL","TLOG"
+};
+
+#ifdef LOG_USE_COLOR
+static const char *level_colors[] =
+{
+	"\x1b[94m", "\x1b[36m", "\x1b[32m", "\x1b[33m", "\x1b[31m", "\x1b[35m", "\x1b[94m"
+};
+#endif
+
+void LogSetfp(FILE *Fp)
+{
+	Logfp = Fp;
+}
+
+
+void LogSetLevel(s32 Level)
+{
+	LogLevel = Level;
+}
+
+void FormatString(char* Buf, char* Str, ...)
+{
+	va_list Args;
+	va_start(Args, Str);
+	stbsp_vsprintf(Buf, Str, Args);
+	va_end(Args);
+}
+
+void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
+{
+	if (Level < LogLevel)
+	{
+		return;
+	}
+
+	static volatile b32 Lock = 0;
+
+	while(Lock){}; //cheap spinlock
+
+	Lock = 1;
+
+	s8 Buffer[1024];
+
+	/* Get current time */
+	time_t t = time(NULL);
+	struct tm *lt = localtime(&t);
+
+	/* Log to terminal */
+	if (!LogQuiet)
+	{
+		va_list args;
+		if(LogExtra)
+		{
+			char buf[16];
+			buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
+#ifdef LOG_USE_COLOR
+			FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
+					buf, level_colors[Level], level_names[Level], File, Line);
+			fputs(buf, stderr);
+#else
+			FormatString(buf, "%s %-5s %s:%d ", buf, level_names[Level], File, Line);
+			fputs(buf, stderr);
+#endif
+		}
+		va_start(args, Fmt);
+		stbsp_vsprintf(Buffer, Fmt, args);
+		//Appends "\n". For special case use. Treat with care.
+		if(LogNewLine)
+		{
+			puts(Buffer);
+		}
+		else
+		{
+			fputs(Buffer, stderr);
+		}
+		va_end(args);
+	}
+
+	/* Log to file */
+	if (Logfp)
+	{
+		va_list args;
+		if(LogExtra)
+		{
+			char buf[32];
+			buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+			FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[Level], File, Line);
+			fputs(buf, Logfp);
+		}
+		va_start(args, Fmt);
+		stbsp_vsprintf(Buffer, Fmt, args);
+		strcat(Buffer, "\n");
+		fputs(Buffer, Logfp);
+		va_end(args);
+		fflush(Logfp);
+	}
+	Lock = 0;
+}
 
 /*
 To avoid naming conflicts and ability to create more than 1 window -
@@ -148,9 +249,8 @@ void ProcessEvents()
 
 int main(int argc, char** argv)
 {
-	log_set_level(0);
-	FILE* f = fopen("./log.txt","w");
-	log_set_fp(f);
+	FILE* File = fopen("./log.txt","w");
+	LogSetfp(File);
 
 	Wnd.Display = XOpenDisplay(getenv("DISPLAY"));
 	if (Wnd.Display == NULL)
@@ -188,7 +288,7 @@ int main(int argc, char** argv)
 
 	void* VulkanLoader = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_DEEPBIND);
 	PFN_vkGetInstanceProcAddr ProcAddr = dlsym(VulkanLoader, "vkGetInstanceProcAddr");
-	if(!InitVulkan(&ProcAddr, SurfaceCallback, ArrayCount(RequiredExtensions), RequiredExtensions))
+	if(!InitVulkan(&ProcAddr, ArrayCount(RequiredExtensions), RequiredExtensions))
 	{
 		Fatal("Failed to initialize vulkan runtime!");
 		exit(1);
