@@ -331,7 +331,7 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #include "tiny_vulkan.h"
 
 /*
-CODING CONVENTIONS : 
+CODING CONVENTIONS (Kyryl): 
 
 First above all you must follow tinyengine coding style.
 This specific file contains vulkan specific code only for the most part.
@@ -361,15 +361,6 @@ I have few simple rules that I follow and you should too, to keep it consistent.
 
 */
 
-
-//TINYVULKAN LOGGER.
-
-#ifndef STB_SPRINTF_IMPLEMENTATION
-#define STB_SPRINTF_IMPLEMENTATION
-#endif
-
-#include <time.h>
-#include "stb_sprintf.h"
 
 //FORWARD DECLARATIONS
 const char *GetVulkanResultString(VkResult result);
@@ -550,7 +541,7 @@ memzone_t *Mainzone[10];
 //--------------------------------------MEMORY
 
 //POST INIT
-VkClearValue ClearColor[2];
+VkClearValue VkClearColors[2];
 VkClearColorValue ColorValue;
 VkImageSubresourceRange ImageSubResourceRange;
 VkImageMemoryBarrier EndRenderMemBarrier;
@@ -2072,9 +2063,9 @@ void PostInit()
 	ColorValue.float32[1] = 0;
 	ColorValue.float32[2] = 0;
 	ColorValue.float32[3] = 1;
-	ClearColor[0].color = ColorValue;
-	ClearColor[1].depthStencil.depth = 1.0f;
-	ClearColor[1].depthStencil.stencil = 0;
+	VkClearColors[0].color = ColorValue;
+	VkClearColors[1].depthStencil.depth = 1.0f;
+	VkClearColors[1].depthStencil.stencil = 0;
 
 	ImageSubResourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	ImageSubResourceRange.baseMipLevel = 0;
@@ -2172,7 +2163,7 @@ wait:
 	RenderPassBI.framebuffer = VkFramebuffers[ImageIndex];
 	RenderPassBI.renderArea = RenderArea;
 	RenderPassBI.clearValueCount = 2;
-	RenderPassBI.pClearValues = ClearColor;
+	RenderPassBI.pClearValues = VkClearColors;
 
 	vkCmdBeginRenderPass(CommandBuffer, &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
 

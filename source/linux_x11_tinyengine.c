@@ -10,11 +10,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dlfcn.h>
+#include <time.h>
 
 #include "tinyengine.h"
 
 #define VK_NO_PROTOTYPES
 #include "vulkan_core.h"
+
+#ifndef STB_SPRINTF_IMPLEMENTATION
+#define STB_SPRINTF_IMPLEMENTATION
+#endif
+#include "stb_sprintf.h"
 
 void SurfaceCallback(VkSurfaceKHR* Surface);
 
