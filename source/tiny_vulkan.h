@@ -26,7 +26,6 @@ INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetPhysicalDeviceFormatProperties )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkCreateDevice )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkGetDeviceProcAddr )
 INSTANCE_LEVEL_VULKAN_FUNCTION( vkDestroyInstance )
-
 #undef INSTANCE_LEVEL_VULKAN_FUNCTION
 
 //
@@ -174,12 +173,6 @@ DEVICE_LEVEL_VULKAN_FUNCTION_FROM_EXTENSION( vkDestroySwapchainKHR, VK_KHR_SWAPC
 
 #ifndef TINY_VULKAN_H
 #define TINY_VULKAN_H
-
-
-
-/*
-This file will contain platform independent vulkan code
-*/
 
 PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr;
 
@@ -337,6 +330,37 @@ PFN_vkDestroySwapchainKHR vkDestroySwapchainKHR;
 #define TINY_VULKAN_UPDATE
 #include "tiny_vulkan.h"
 
+/*
+CODING CONVENTIONS : 
+
+First above all you must follow tinyengine coding style.
+This specific file contains vulkan specific code only for the most part.
+I have few simple rules that I follow and you should too, to keep it consistent.
+
+
+1. NO 0 struct initialization on vulkan structures (except arrays). (aka memset(..., 0, ...) or {0}) 
+2. Struct Variables resemble original struct name but have shortcut at the end
+   CI = CreateInfo
+   AI = AllocationInfo
+   etc ...
+   Example: VkImageViewCreateInfo SwchImageViewCI;
+   You may add extra prefix like Swch or extra word to indicate the object family.
+
+3. Array names must have Vk prefix and plural form of the word. Single variables do not. 
+   Example: 
+   VkSwapchainKHR VkSwapchains[10];
+   VkSwapchainKHR* VkSwapchains;
+   VkSwapchainKHR Swapchain;
+   Must resemble the type name, but you may but extra prefix or word if needed.
+
+4. Function names have Vk prefix if you want to indicate vulkan runtime to the user.
+   I am not very strict about this, so I use this to outline important stuff.   
+   I'll leave this to your liking as long as the code makes sense.
+
+"Omnibus promissibus servanda sunt"
+
+*/
+
 
 //TINYVULKAN LOGGER.
 
@@ -384,14 +408,14 @@ void PostInit();
 VkAllocationCallbacks Allocator;
 VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
-VkDebugReportCallbackEXT VkDebugCallback;
+VkDebugReportCallbackEXT VulkanDebugCallback;
 u32 CurrentFrame; 
 //-----------------------------------------------------
 
 //Gpu init:
 VkDevice LogicalDevice;
 VkPhysicalDevice GpuDevice;
-VkExtensionProperties *DeviceExtensionProperties;
+VkExtensionProperties *VkDeviceExtensionProperties;
 u32 DeviceExtPropCount;
 VkPhysicalDeviceProperties DeviceProperties;
 VkPhysicalDeviceFeatures DeviceFeatures;
@@ -411,12 +435,12 @@ VkSurfaceCapabilitiesKHR SurfaceCapabilities;
 VkImageUsageFlags SwchImageUsage;
 VkSurfaceTransformFlagBitsKHR SwchTransform;
 VkExtent2D SwchImageSize;
-VkImage *SwchImages;
+VkImage *VkSwchImages;
 u32 SwchImageCount;
 VkColorSpaceKHR SwchImageColorSpace;
 VkFormat SwchImageFormat;
 VkSwapchainKHR VkSwapchains[10];
-VkImageView* SwchImageViews;
+VkImageView* VkSwchImageViews;
 
 //RENDERING RESOURCES
 /*
@@ -676,8 +700,8 @@ void CreateSwapchainImageViews()
 
 	for(u32 i = 0; i<SwchImageCount; i++)
 	{
-		SwchImageViewCI.image = SwchImages[i];
-		VK_CHECK(vkCreateImageView(LogicalDevice, &SwchImageViewCI, 0, &SwchImageViews[i]));
+		SwchImageViewCI.image = VkSwchImages[i];
+		VK_CHECK(vkCreateImageView(LogicalDevice, &SwchImageViewCI, 0, &VkSwchImageViews[i]));
 	}
 }
 
@@ -697,7 +721,7 @@ void CreateSwchFrameBuffers()
 	FramebufferCI.attachmentCount = 2;
 	for(u32 i = 0; i < SwchImageCount; i++)
 	{
-		VkImageView Attachments[] = { SwchImageViews[i], DepthBufferView };
+		VkImageView Attachments[] = { VkSwchImageViews[i], DepthBufferView };
 		FramebufferCI.pAttachments = Attachments;
 		VK_CHECK(vkCreateFramebuffer(LogicalDevice, &FramebufferCI, 0, &VkFramebuffers[i]));
 	}
@@ -1320,7 +1344,7 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 
 #ifdef TINYENGINE_DEBUG
 
-VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, u64 object, size_t location, s32 messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
+VkBool32 VKAPI_CALL DebugReportCallback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT objectType, u64 object, size_t location, s32 messageCode, const char* pLayerPrefix, const char* pMessage, void* pUserData)
 {
 	// This silences warnings like "For optimal performance image layout should be VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL instead of GENERAL."
 	// We'll assume other performance warnings are also not useful.
@@ -1350,26 +1374,26 @@ VkBool32 VKAPI_CALL debugReportCallback(VkDebugReportFlagsEXT flags, VkDebugRepo
 	return VK_FALSE;
 }
 
-b32 CheckValidationLayerSupport(const char** debugLayers, s32 ReqCount)
+b32 CheckValidationLayerSupport(const char** DebugLayers, s32 ReqCount)
 {
-	u32 layerCount;
-	vkEnumerateInstanceLayerProperties(&layerCount, NULL);
+	u32 LayerCount;
+	vkEnumerateInstanceLayerProperties(&LayerCount, NULL);
 
-	VkLayerProperties availableLayers[layerCount];
-	vkEnumerateInstanceLayerProperties(&layerCount, &availableLayers[0]);
+	VkLayerProperties AvailableLayers[LayerCount];
+	vkEnumerateInstanceLayerProperties(&LayerCount, &AvailableLayers[0]);
 
 	for(s32 i = 0; i<ReqCount; i++)
 	{
-		b32 layerFound = false;
-		for (u32 z = 0; z<layerCount; z++)
+		b32 LayerFound = false;
+		for (u32 z = 0; z<LayerCount; z++)
 		{
-			if (strcmp(debugLayers[i], (char*) &availableLayers[z]) == 0)
+			if (strcmp(DebugLayers[i], (char*) &AvailableLayers[z]) == 0)
 			{
-				layerFound = true;
+				LayerFound = true;
 				break;
 			}
 		}
-		if (!layerFound)
+		if (!LayerFound)
 		{
 			return false;
 		}
@@ -1381,16 +1405,16 @@ void RegisterDebugCallback()
 {
 	if(vkCreateDebugReportCallbackEXT)
 	{
-		VkDebugReportCallbackCreateInfoEXT createInfo;
-		createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-		createInfo.pNext = NULL;
-		createInfo.flags = VK_DEBUG_REPORT_WARNING_BIT_EXT |
+		VkDebugReportCallbackCreateInfoEXT DebugReportCallbackCI;
+		DebugReportCallbackCI.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+		DebugReportCallbackCI.pNext = NULL;
+		DebugReportCallbackCI.flags = VK_DEBUG_REPORT_WARNING_BIT_EXT |
 			VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT |
 			VK_DEBUG_REPORT_ERROR_BIT_EXT;
-		createInfo.pfnCallback = debugReportCallback;
-		createInfo.pUserData = NULL;
+		DebugReportCallbackCI.pfnCallback = DebugReportCallback;
+		DebugReportCallbackCI.pUserData = NULL;
 
-		VK_CHECK(vkCreateDebugReportCallbackEXT(Instance, &createInfo, 0, &VkDebugCallback));
+		VK_CHECK(vkCreateDebugReportCallbackEXT(Instance, &DebugReportCallbackCI, 0, &VulkanDebugCallback));
 	}
 }
 
@@ -1418,14 +1442,14 @@ void RebuildRenderer()
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
 	ASSERT(ImageCount, "Failed to get swapchain image count.");
 
-	ASSERT(SwchImages, "Swapchain images unallocated.");
+	ASSERT(VkSwchImages, "Swapchain images unallocated.");
 
-	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &SwchImages[0]));
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &VkSwchImages[0]));
 
 	//Delete incompatible objects.
 	for(i = 0; i<SwchImageCount; i++)
 	{
-		vkDestroyImageView(LogicalDevice, SwchImageViews[i], NULL);
+		vkDestroyImageView(LogicalDevice, VkSwchImageViews[i], NULL);
 	}
 
 	CreateSwapchainImageViews();
@@ -1600,9 +1624,9 @@ _continue:;
 		else
 		{
 			//Found a Gpu
-			int size = (sizeof(VkExtensionProperties)  *DeviceExtensionCount);
-			DeviceExtensionProperties = (VkExtensionProperties*) malloc(size);
-			memcpy(DeviceExtensionProperties, ExtensionProperties, size);
+			u32 Size = (sizeof(VkExtensionProperties)  *DeviceExtensionCount);
+			VkDeviceExtensionProperties = (VkExtensionProperties*) malloc(Size);
+			memcpy(VkDeviceExtensionProperties, ExtensionProperties, Size);
 			DeviceExtPropCount = DeviceExtensionCount;
 			GpuDevice = Devices[i];
 
@@ -1676,7 +1700,7 @@ _continue:;
 	{
 		for(i = 0; i < DeviceExtPropCount; i++)
 		{
-			if(strstr(DeviceExtensions[c], (char*)&DeviceExtensionProperties[i]))
+			if(strstr(DeviceExtensions[c], (char*)&VkDeviceExtensionProperties[i]))
 			{
 				Info("Using device extension: %s ", DeviceExtensions[c]);
 				goto __continue;
@@ -1685,7 +1709,7 @@ _continue:;
 		Debug("Available Extensions: ");
 		for(i = 0; i < DeviceExtPropCount; i++)
 		{
-			Debug("%s", (char*)&DeviceExtensionProperties[i]);
+			Debug("%s", (char*)&VkDeviceExtensionProperties[i]);
 		}
 		Fatal("Extension %s is not supported by physical device!", DeviceExtensions[c]);
 		return false;
@@ -1757,7 +1781,7 @@ __continue:;
 	}
 	SwchImageCount += 1;
 
-	SwchImageViews = (VkImageView*) malloc(sizeof(VkImageView) * SwchImageCount);
+	VkSwchImageViews = (VkImageView*) malloc(sizeof(VkImageView) * SwchImageCount);
 
 	VkImageUsageFlags TmpImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	SwchImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -1826,9 +1850,9 @@ out:;
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
 	ASSERT(ImageCount, "Failed to get swapchain image count.");
 
-	SwchImages = (VkImage*) malloc(sizeof(VkImage) * ImageCount);
+	VkSwchImages = (VkImage*) malloc(sizeof(VkImage) * ImageCount);
 
-	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &SwchImages[0]));
+	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &VkSwchImages[0]));
 
 	CreateSwapchainImageViews();
 
@@ -2136,7 +2160,7 @@ wait:
 	RenderArea.extent.width = SwchImageSize.width;
 	RenderArea.extent.height = SwchImageSize.height;
 
-	BeginRenderMemBarrier.image = SwchImages[ImageIndex];
+	BeginRenderMemBarrier.image = VkSwchImages[ImageIndex];
 
 	vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
 	                     0, 0, NULL, 0, NULL, 1, &BeginRenderMemBarrier);
@@ -2170,7 +2194,7 @@ void VkEndRendering()
 	vkCmdEndRenderPass(CommandBuffer);
 
 	//transition swapchain image format
-	EndRenderMemBarrier.image = SwchImages[ImageIndex];
+	EndRenderMemBarrier.image = VkSwchImages[ImageIndex];
 
 	vkCmdPipelineBarrier(CommandBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 	                     0, 0, NULL, 0, NULL, 1, &EndRenderMemBarrier);
