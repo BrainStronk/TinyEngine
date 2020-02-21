@@ -349,7 +349,7 @@ I have few simple rules that I follow and you should too, to keep it consistent.
 3. Array names must have Vk prefix and plural form of the word. Single variables do not. 
    Example: 
    VkSwapchainKHR VkSwapchains[10];
-   VkSwapchainKHR* VkSwapchains;
+   VkSwapchainKHR *VkSwapchains;
    VkSwapchainKHR Swapchain;
    Must resemble the type name, but you may but extra prefix or word if needed.
 
@@ -469,6 +469,12 @@ VkImageView DepthBufferView;
 VkDeviceMemory DepthBufferMemory;
 VkFormat DepthFormat;
 
+//DESCRIPTOR SETS
+VkDescriptorPool DescriptorPool;
+VkDescriptorSetLayout VertUniformDescriptorSetLayout;
+VkDescriptorSetLayout FragUniformDescriptorSetLayout;
+VkDescriptorSetLayout FragSamplerDescriptorSetLayout;
+
 //MEMORY
 //NOTE(Kyryl):
 //These structures are conceptually similar but ---
@@ -541,7 +547,7 @@ memzone_t *Mainzone[10];
 //--------------------------------------MEMORY
 
 //POST INIT
-VkClearValue VkClearColors[2];
+VkClearValue VkClearValues[2];
 VkClearColorValue ColorValue;
 VkImageSubresourceRange ImageSubResourceRange;
 VkImageMemoryBarrier EndRenderMemBarrier;
@@ -1923,6 +1929,69 @@ out:;
 	ZInitZone(IndexBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
 	//End MEMORY
 
+	//DESCRIPTOR SETS
+	//NOTE(Kyryl): 
+	//This is a very commonly used objects and through this we can access resources like
+	//UBOs texture samplers and much more! Think of descriptor set a pointer object.
+	VkDescriptorPoolSize PoolSize[2];
+	PoolSize[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	PoolSize[0].descriptorCount = 32;
+	PoolSize[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	PoolSize[1].descriptorCount = 2048;
+
+	VkDescriptorPoolCreateInfo DescriptorPoolCI;
+	DescriptorPoolCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	DescriptorPoolCI.pNext = NULL;
+	DescriptorPoolCI.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	DescriptorPoolCI.maxSets = 2048 + 32;
+	DescriptorPoolCI.poolSizeCount = 2;
+	DescriptorPoolCI.pPoolSizes = PoolSize;
+	VK_CHECK(vkCreateDescriptorPool(LogicalDevice, &DescriptorPoolCI, VkAllocators, &DescriptorPool));
+
+	//NOTE(Kyryl):
+	//There are many ways to do this and lay out the objects. 
+	//Through experience I think this is the most flexible way.
+	//This covers a lot of need cases, but if more needed, always add here.
+
+	//Vubo = vertex uniform buffer object
+	VkDescriptorSetLayoutBinding VuboSLB;
+	VuboSLB.binding = 0;
+	VuboSLB.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	VuboSLB.descriptorCount = 1;
+	VuboSLB.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	VuboSLB.pImmutableSamplers = NULL;
+
+	//Fubo = fragment uniform buffer object
+	VkDescriptorSetLayoutBinding FuboSLB;
+	FuboSLB.binding = 0;
+	FuboSLB.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	FuboSLB.descriptorCount = 1;
+	FuboSLB.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	FuboSLB.pImmutableSamplers = NULL;
+
+	//Fso = fragment sampler object
+	VkDescriptorSetLayoutBinding FsoSLB;
+	FsoSLB.binding = 0;
+	FsoSLB.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	FsoSLB.descriptorCount = 1;
+	FsoSLB.pImmutableSamplers = NULL;
+	FsoSLB.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutCreateInfo DescriptorSetLayoutCI;
+	DescriptorSetLayoutCI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	DescriptorSetLayoutCI.pNext = NULL;
+	DescriptorSetLayoutCI.flags = 0;
+	DescriptorSetLayoutCI.bindingCount = 1;
+
+	DescriptorSetLayoutCI.pBindings = &VuboSLB;
+	VK_CHECK(vkCreateDescriptorSetLayout(LogicalDevice, &DescriptorSetLayoutCI, VkAllocators, &VertUniformDescriptorSetLayout));
+	DescriptorSetLayoutCI.pBindings = &FuboSLB;
+	VK_CHECK(vkCreateDescriptorSetLayout(LogicalDevice, &DescriptorSetLayoutCI, VkAllocators, &FragUniformDescriptorSetLayout));
+	DescriptorSetLayoutCI.pBindings = &FsoSLB;
+	VK_CHECK(vkCreateDescriptorSetLayout(LogicalDevice, &DescriptorSetLayoutCI, VkAllocators, &FragSamplerDescriptorSetLayout));
+
+	//End DESCRIPTOR SETS
+
 	//DEPTH BUFFER
 
 	// Find depth format
@@ -2063,9 +2132,9 @@ void PostInit()
 	ColorValue.float32[1] = 0;
 	ColorValue.float32[2] = 0;
 	ColorValue.float32[3] = 1;
-	VkClearColors[0].color = ColorValue;
-	VkClearColors[1].depthStencil.depth = 1.0f;
-	VkClearColors[1].depthStencil.stencil = 0;
+	VkClearValues[0].color = ColorValue;
+	VkClearValues[1].depthStencil.depth = 1.0f;
+	VkClearValues[1].depthStencil.stencil = 0;
 
 	ImageSubResourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	ImageSubResourceRange.baseMipLevel = 0;
@@ -2163,7 +2232,7 @@ wait:
 	RenderPassBI.framebuffer = VkFramebuffers[ImageIndex];
 	RenderPassBI.renderArea = RenderArea;
 	RenderPassBI.clearValueCount = 2;
-	RenderPassBI.pClearValues = VkClearColors;
+	RenderPassBI.pClearValues = VkClearValues;
 
 	vkCmdBeginRenderPass(CommandBuffer, &RenderPassBI, VK_SUBPASS_CONTENTS_INLINE);
 
