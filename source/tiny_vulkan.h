@@ -366,6 +366,8 @@ I have few simple rules that I follow and you should too, to keep it consistent.
 const char *GetVulkanResultString(VkResult result);
 s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
 void PostInit();
+VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkMemoryRequirements MemReq);
+void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory, VkDeviceSize Offset);
 //--------------------
 
 
@@ -481,6 +483,26 @@ VkDescriptorSet VertUniformDescriptorSet;
 VkDescriptorSet FragUniformDescriptorSet;
 VkDescriptorSet FragSamplerDescriptorSet;
 
+//TEXTURES
+#define NUM_TEXTURES 100
+//-----------------------------------
+u32 TextureCount;
+typedef struct texture_t
+{
+	u8 *Data;
+	u32 Width;
+	u32 Height;
+	VkImage Image;
+	VkImageView ImageView;
+//May get rid of these later, waste of memory possibly.
+	VkImageType ImageType;
+	VkImageViewType ImageViewType;
+	VkFormat Format;
+	VkImageUsageFlags Usage;
+}texture_t;
+texture_t TexturePool[NUM_TEXTURES];
+
+
 //MEMORY
 //NOTE(Kyryl):
 //These structures are conceptually similar but ---
@@ -525,6 +547,17 @@ typedef struct ubo_t
 	void *Data;
 }ubo_t;
 ubo_t UniformBuffers[NUM_UBO_BUFFERS];
+
+#define NUM_DEVICE_HEAPS 100
+u32 DeviceHeapCount;
+typedef struct device_heap_t
+{
+	VkDeviceMemory DeviceMemory;
+	VkDeviceSize Size;
+	VkDeviceSize Offset;
+	b32 Free;
+}device_heap_t;
+device_heap_t DeviceHeaps[NUM_DEVICE_HEAPS];
 
 //INTERNAL SEGMENTED MEMORY MANAGER
 #define	ZONEID	0x1d4a11
@@ -731,37 +764,78 @@ void CreateSwchFrameBuffers()
 	}
 }
 
-VkImage Create2DImage(VkFormat format, VkImageUsageFlags usage, int w, int h)
+VkImage 
+CreateImage(VkFormat Format, VkImageType Type, VkImageUsageFlags Usage, u32 Width, u32 Height)
 {
 	VkImage Img;
 	VkImageCreateInfo ImageCI;
 	ImageCI.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	ImageCI.pNext = NULL;
 	ImageCI.flags = 0;
-	ImageCI.imageType = VK_IMAGE_TYPE_2D;
-	ImageCI.format = format;
-	ImageCI.extent.width = w;
-	ImageCI.extent.height = h;
+	ImageCI.imageType = Type;
+	ImageCI.format = Format;
+	ImageCI.extent.width = Width;
+	ImageCI.extent.height = Height;
 	ImageCI.extent.depth = 1;
 	ImageCI.mipLevels = 1;
 	ImageCI.arrayLayers = 1;
 	ImageCI.samples = VK_SAMPLE_COUNT_1_BIT;
 	ImageCI.tiling = VK_IMAGE_TILING_OPTIMAL;
-	ImageCI.usage = usage;
+	ImageCI.usage = Usage;
 	ImageCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	ImageCI.queueFamilyIndexCount = 0;
 	ImageCI.pQueueFamilyIndices = NULL;
 	ImageCI.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	VK_CHECK(vkCreateImage(LogicalDevice, &ImageCI, NULL, &Img));
+	VK_CHECK(vkCreateImage(LogicalDevice, &ImageCI, VkAllocators, &Img));
 	return Img;
+}
+
+//Returns Image and ImageView.
+void CreateTexture(texture_t *Texture)
+{
+	ASSERT(TextureCount < NUM_TEXTURES, "TextureCount > NUM_TEXTURES");
+	ASSERT(Texture->Data, "");
+	ASSERT(Texture->ImageType, "");
+	ASSERT(Texture->Usage, "");
+	ASSERT(Texture->Format, "");
+	ASSERT(Texture->Width, "");
+	ASSERT(Texture->Height, "");
+
+	Texture->Image = CreateImage(Texture->Format, Texture->ImageType, Texture->Usage, Texture->Width, Texture->Height);
+
+	VkMemoryRequirements MemoryRequirements;
+	vkGetImageMemoryRequirements(LogicalDevice, Texture->Image, &MemoryRequirements);
+
+	VkDeviceMemory DeviceMemory;
+	VkDeviceMalloc(4 * Texture->Width * Texture->Height, &DeviceMemory, MemoryRequirements);
+
+	VkImageViewCreateInfo ImageViewCI;
+	ImageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	ImageViewCI.pNext = NULL;
+	ImageViewCI.flags = 0;
+	ImageViewCI.viewType = Texture->ImageViewType;
+	ImageViewCI.format = Texture->Format;
+	ImageViewCI.components.r = VK_COMPONENT_SWIZZLE_R;
+	ImageViewCI.components.g = VK_COMPONENT_SWIZZLE_G;
+	ImageViewCI.components.b = VK_COMPONENT_SWIZZLE_B;
+	ImageViewCI.components.a = VK_COMPONENT_SWIZZLE_A;
+	ImageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	ImageViewCI.subresourceRange.baseMipLevel = 0;
+	ImageViewCI.subresourceRange.levelCount = 1;
+	ImageViewCI.subresourceRange.baseArrayLayer = 0;
+	ImageViewCI.subresourceRange.layerCount = 1;
+
+	ImageViewCI.image = Texture->Image;
+	VK_CHECK(vkCreateImageView(LogicalDevice, &ImageViewCI, VkAllocators, &Texture->ImageView));
+	TextureCount++;
 }
 
 void DestroyDepthBuffer()
 {
-	vkDestroyImage(LogicalDevice, DepthBuffer, NULL);
-	vkFreeMemory(LogicalDevice, DepthBufferMemory, NULL);
-	vkDestroyImageView(LogicalDevice, DepthBufferView, NULL);
+	vkDestroyImage(LogicalDevice, DepthBuffer, VkAllocators);
+	vkFreeMemory(LogicalDevice, DepthBufferMemory, VkAllocators);
+	vkDestroyImageView(LogicalDevice, DepthBufferView, VkAllocators);
 }
 
 void CreateDepthBuffer()
@@ -773,16 +847,10 @@ void CreateDepthBuffer()
 		DestroyDepthBuffer();
 	}
 
-	DepthBuffer = Create2DImage(DepthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, SwchImageSize.width, SwchImageSize.height);
+	DepthBuffer = CreateImage(DepthFormat, VK_IMAGE_TYPE_2D, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, SwchImageSize.width, SwchImageSize.height);
 
 	VkMemoryRequirements MemoryRequirements;
 	vkGetImageMemoryRequirements(LogicalDevice, DepthBuffer, &MemoryRequirements);
-
-//	VkMemoryDedicatedAllocateInfoKHR DedicatedAI;
-//	DedicatedAI.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR;
-//	DedicatedAI.pNext = NULL;
-//	DedicatedAI.image = DepthBuffer;
-//	DedicatedAI.buffer = VK_NULL_HANDLE;
 
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -790,7 +858,7 @@ void CreateDepthBuffer()
 	MemoryAI.allocationSize = MemoryRequirements.size;
 	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
 
-	VK_CHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, NULL, &DepthBufferMemory));
+	VK_CHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, &DepthBufferMemory));
 	VK_CHECK(vkBindImageMemory(LogicalDevice, DepthBuffer, DepthBufferMemory, 0));
 
 	VkImageViewCreateInfo DepthBufferImageViewCI;
@@ -800,17 +868,17 @@ void CreateDepthBuffer()
 	DepthBufferImageViewCI.image = DepthBuffer;
 	DepthBufferImageViewCI.viewType = VK_IMAGE_VIEW_TYPE_2D;
 	DepthBufferImageViewCI.format = DepthFormat;
-	DepthBufferImageViewCI.components.r = 0; 
-	DepthBufferImageViewCI.components.g = 0; 
-	DepthBufferImageViewCI.components.b = 0; 
-	DepthBufferImageViewCI.components.a = 0; 
+	DepthBufferImageViewCI.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+	DepthBufferImageViewCI.components.g = VK_COMPONENT_SWIZZLE_IDENTITY; 
+	DepthBufferImageViewCI.components.b = VK_COMPONENT_SWIZZLE_IDENTITY; 
+	DepthBufferImageViewCI.components.a = VK_COMPONENT_SWIZZLE_IDENTITY; 
 	DepthBufferImageViewCI.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	DepthBufferImageViewCI.subresourceRange.baseMipLevel = 0;
 	DepthBufferImageViewCI.subresourceRange.levelCount = 1;
 	DepthBufferImageViewCI.subresourceRange.baseArrayLayer = 0;
 	DepthBufferImageViewCI.subresourceRange.layerCount = 1;
 
-	VK_CHECK(vkCreateImageView(LogicalDevice, &DepthBufferImageViewCI, NULL, &DepthBufferView));
+	VK_CHECK(vkCreateImageView(LogicalDevice, &DepthBufferImageViewCI, VkAllocators, &DepthBufferView));
 }
 
 s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask)
@@ -920,18 +988,76 @@ void *VkHostMalloc(u32 Size, VkBuffer *Buffer, VkDeviceMemory *DeviceMemory, VkB
 //This memory resides in dedicated graphics card and can't be mapped.
 //Meaning we can't get direct cpu pointer to it's contents, but we can
 //Get vulkan handle and use vulkan commands to operate on it.
-//TODO: Do this properly. Make structure and heap where these things are stored.
-void VkDeviceMalloc(u32 Size, VkDeviceMemory *DeviceMemory)
+VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkMemoryRequirements MemReq)
 {
-	VkMemoryRequirements MemoryRequirements = {0};
+	ASSERT(DeviceHeapCount < NUM_DEVICE_HEAPS, "Out of DeviceHeaps.");
+	device_heap_t *Heap;
+	for(u32 i = 0; i < DeviceHeapCount; i++)
+	{
+		Heap = &DeviceHeaps[i];
+		if(Heap->Free)
+		{
+			const VkDeviceSize AlignMod = Heap->Offset % MemReq.alignment;
+			VkDeviceSize AlignPad = (AlignMod == 0) ? 0 : (MemReq.alignment - AlignMod);
+			VkDeviceSize AlignedSize = Size + AlignPad;
+			if(Heap->Size == AlignedSize)
+			{
+				Heap->Free = false;
+				return Heap->Offset + AlignPad;
+			}
+			if(Heap->Size > AlignedSize)
+			{
+				device_heap_t *NewHeap = &DeviceHeaps[DeviceHeapCount];
+				NewHeap->DeviceMemory = Heap->DeviceMemory;
+				NewHeap->Size = Size;
+				NewHeap->Offset = Heap->Offset + AlignPad;
+				NewHeap->Free = false;
+				Heap->Size -= AlignedSize;
+				Heap->Offset += AlignedSize;
+				DeviceHeapCount++;
+				return NewHeap->Offset;
+			}
+		}
 
+	}
 	VkMemoryAllocateInfo MemoryAI;
 	MemoryAI.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	MemoryAI.pNext = NULL;
 	MemoryAI.allocationSize = Size;
-	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+	MemoryAI.memoryTypeIndex = MemoryTypeFromProperties(MemReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
 
 	VK_MCHECK(vkAllocateMemory(LogicalDevice, &MemoryAI, VkAllocators, DeviceMemory), "vkAllocateMemory failed!");
+	Heap = &DeviceHeaps[DeviceHeapCount];
+	Heap->DeviceMemory = *DeviceMemory;
+	Heap->Size = Size;
+	Heap->Offset = 0;
+	Heap->Free = 0;
+	DeviceHeapCount++;
+	return 0;
+}
+
+void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory, VkDeviceSize Offset)
+{
+	device_heap_t *Heap;
+	if(Index)
+	{
+		Heap = &DeviceHeaps[Index];
+		ASSERT(Heap->Free, "Tried to free freed device heap!");
+		Heap->Free = true;
+		return;
+	}
+	//Basic O(n) search
+	for(u32 i = 0; i < DeviceHeapCount; i++)
+	{
+		Heap = &DeviceHeaps[i];
+		if(Heap->DeviceMemory == DeviceMemory && Heap->Offset == Offset)
+		{
+			ASSERT(Heap->Free, "Tried to free freed device heap!");
+			Heap->Free = true;
+			return;
+		}
+	}
+
 }
 
 void *ZMalloc(s32 Size, u8 Zoneid)
@@ -1933,7 +2059,7 @@ out:;
 	UniformBuffers[0].Size = 20480;
 	UniformBuffers[0].Data = VkHostMalloc(UniformBuffers[0].Size, &UniformBuffers[0].Buffer, &UniformBuffers[0].DeviceMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 	// Align to 256 bytes (ref spec)
-	ZInitZone(IndexBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
+	ZInitZone(UniformBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
 	//End MEMORY
 
 	//SAMPLERS
@@ -2061,13 +2187,17 @@ out:;
 	WriteDS.dstSet = FragUniformDescriptorSet;
 	vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
 
+	//Create a 2d texture to serve as pixel buffer. 
+	//Implements an ability to write pixels directly to the screen.
+	//PixelImageView = CreateImageView(SwchImageFormat, VK_IMAGE_VIEW_TYPE_2D, PixelImage);
+
 	VkDescriptorImageInfo DescriptorII;
 	DescriptorII.sampler = PointSampler;
 	DescriptorII.imageView = VkSwchImageViews[0]; //this is a stub for now.
 	DescriptorII.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	WriteDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	WriteDS.pBufferInfo = NULL; //this is not a uniform buffer set to NULL.
+	WriteDS.pBufferInfo = NULL; //this is not a uniform buffer. 
 	WriteDS.pImageInfo = &DescriptorII;
 	WriteDS.dstSet = FragSamplerDescriptorSet;
 	//vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
