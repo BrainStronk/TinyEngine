@@ -469,11 +469,17 @@ VkImageView DepthBufferView;
 VkDeviceMemory DepthBufferMemory;
 VkFormat DepthFormat;
 
+//SAMPLERS
+VkSampler PointSampler;
+
 //DESCRIPTOR SETS
 VkDescriptorPool DescriptorPool;
 VkDescriptorSetLayout VertUniformDescriptorSetLayout;
 VkDescriptorSetLayout FragUniformDescriptorSetLayout;
 VkDescriptorSetLayout FragSamplerDescriptorSetLayout;
+VkDescriptorSet VertUniformDescriptorSet;
+VkDescriptorSet FragUniformDescriptorSet;
+VkDescriptorSet FragSamplerDescriptorSet;
 
 //MEMORY
 //NOTE(Kyryl):
@@ -508,6 +514,7 @@ typedef struct ibo_t
 }ibo_t;
 ibo_t IndexBuffers[NUM_IBO_BUFFERS];
 
+#define MAX_UNIFORM_ALLOC 2048
 u32 UboAllocCount;
 typedef struct ubo_t
 {
@@ -1929,6 +1936,30 @@ out:;
 	ZInitZone(IndexBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
 	//End MEMORY
 
+	//SAMPLERS
+	VkSamplerCreateInfo SamplerCI;
+	SamplerCI.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	SamplerCI.pNext = NULL;
+	SamplerCI.flags = 0;
+	SamplerCI.magFilter = VK_FILTER_NEAREST;
+	SamplerCI.minFilter = VK_FILTER_NEAREST;
+	SamplerCI.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+	SamplerCI.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	SamplerCI.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	SamplerCI.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	SamplerCI.mipLodBias = 0.0f;
+	SamplerCI.anisotropyEnable = 0;
+	SamplerCI.maxAnisotropy = 1.0f;
+	SamplerCI.compareEnable = 0;
+	SamplerCI.compareOp = 0;
+	SamplerCI.minLod = 0;
+	SamplerCI.maxLod = 0.25f;
+	SamplerCI.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+	SamplerCI.unnormalizedCoordinates = VK_FALSE;
+
+	VK_CHECK(vkCreateSampler(LogicalDevice, &SamplerCI, NULL, &PointSampler));
+	//SAMPLERS
+
 	//DESCRIPTOR SETS
 	//NOTE(Kyryl): 
 	//This is a very commonly used objects and through this we can access resources like
@@ -1989,6 +2020,58 @@ out:;
 	VK_CHECK(vkCreateDescriptorSetLayout(LogicalDevice, &DescriptorSetLayoutCI, VkAllocators, &FragUniformDescriptorSetLayout));
 	DescriptorSetLayoutCI.pBindings = &FsoSLB;
 	VK_CHECK(vkCreateDescriptorSetLayout(LogicalDevice, &DescriptorSetLayoutCI, VkAllocators, &FragSamplerDescriptorSetLayout));
+
+	//Allocate and write descriptor sets. 
+
+	VkDescriptorSetAllocateInfo DescriptorSetAI;
+	DescriptorSetAI.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	DescriptorSetAI.pNext = NULL;
+	DescriptorSetAI.descriptorPool = DescriptorPool;
+	DescriptorSetAI.descriptorSetCount = 1;
+
+	DescriptorSetAI.pSetLayouts = &VertUniformDescriptorSetLayout;
+	vkAllocateDescriptorSets(LogicalDevice, &DescriptorSetAI, &VertUniformDescriptorSet);
+
+	DescriptorSetAI.pSetLayouts = &FragUniformDescriptorSetLayout;
+	vkAllocateDescriptorSets(LogicalDevice, &DescriptorSetAI, &FragUniformDescriptorSet);
+
+	DescriptorSetAI.pSetLayouts = &FragSamplerDescriptorSetLayout;
+	vkAllocateDescriptorSets(LogicalDevice, &DescriptorSetAI, &FragSamplerDescriptorSet);
+
+	VkDescriptorBufferInfo DescriptorBI;
+	DescriptorBI.offset = 0;
+	DescriptorBI.range = MAX_UNIFORM_ALLOC;
+
+	VkWriteDescriptorSet WriteDS;
+	WriteDS.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	WriteDS.pNext = NULL;
+	WriteDS.dstBinding = 0;
+	WriteDS.dstArrayElement = 0;
+	WriteDS.descriptorCount = 1;
+	WriteDS.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	WriteDS.pImageInfo = NULL;
+	WriteDS.pBufferInfo = &DescriptorBI;
+	WriteDS.pTexelBufferView = NULL;
+
+	DescriptorBI.buffer = UniformBuffers[0].Buffer;
+	WriteDS.dstSet = VertUniformDescriptorSet;
+	vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
+
+	DescriptorBI.buffer = UniformBuffers[0].Buffer;
+	WriteDS.dstSet = FragUniformDescriptorSet;
+	vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
+
+	VkDescriptorImageInfo DescriptorII;
+	DescriptorII.sampler = PointSampler;
+	DescriptorII.imageView = VkSwchImageViews[0]; //this is a stub for now.
+	DescriptorII.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+	WriteDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	WriteDS.pBufferInfo = NULL; //this is not a uniform buffer set to NULL.
+	WriteDS.pImageInfo = &DescriptorII;
+	WriteDS.dstSet = FragSamplerDescriptorSet;
+	//vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
+//
 
 	//End DESCRIPTOR SETS
 
@@ -2092,6 +2175,15 @@ out:;
 
 	//The most simple layout.
 	VkPipelineLayoutCreateInfo PipelineLayoutCI;
+	PipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	PipelineLayoutCI.pNext = NULL;
+	PipelineLayoutCI.flags = 0;
+	PipelineLayoutCI.setLayoutCount = 0;
+	PipelineLayoutCI.pSetLayouts = NULL;
+	PipelineLayoutCI.pushConstantRangeCount = 0;
+	PipelineLayoutCI.pPushConstantRanges = NULL;
+	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[0]));
+
 	PipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	PipelineLayoutCI.pNext = NULL;
 	PipelineLayoutCI.flags = 0;
