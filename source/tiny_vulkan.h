@@ -367,7 +367,7 @@ const char *GetVulkanResultString(VkResult result);
 s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags preferred_mask);
 void PostInit();
 VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkMemoryRequirements MemReq);
-void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory, VkDeviceSize Offset);
+void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory);
 //--------------------
 
 
@@ -492,6 +492,7 @@ typedef struct texture_t
 	u8 *Data;
 	u32 Width;
 	u32 Height;
+	u32 HeapIndex;
 	VkImage Image;
 	VkImageView ImageView;
 //May get rid of these later, waste of memory possibly.
@@ -791,7 +792,6 @@ CreateImage(VkFormat Format, VkImageType Type, VkImageUsageFlags Usage, u32 Widt
 	return Img;
 }
 
-//Returns Image and ImageView.
 void CreateTexture(texture_t *Texture)
 {
 	ASSERT(TextureCount < NUM_TEXTURES, "TextureCount > NUM_TEXTURES");
@@ -806,9 +806,11 @@ void CreateTexture(texture_t *Texture)
 
 	VkMemoryRequirements MemoryRequirements;
 	vkGetImageMemoryRequirements(LogicalDevice, Texture->Image, &MemoryRequirements);
+	Texture->HeapIndex = DeviceHeapCount;
 
 	VkDeviceMemory DeviceMemory;
-	VkDeviceMalloc(4 * Texture->Width * Texture->Height, &DeviceMemory, MemoryRequirements);
+	VkDeviceSize Offset = VkDeviceMalloc(MemoryRequirements.size, &DeviceMemory, MemoryRequirements);
+	VK_CHECK(vkBindImageMemory(LogicalDevice, Texture->Image, DeviceMemory, Offset));
 
 	VkImageViewCreateInfo ImageViewCI;
 	ImageViewCI.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1036,26 +1038,43 @@ VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkM
 	return 0;
 }
 
-void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory, VkDeviceSize Offset)
+void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory)
 {
 	device_heap_t *Heap;
-	if(Index)
+	if(!DeviceMemory)
 	{
 		Heap = &DeviceHeaps[Index];
-		ASSERT(Heap->Free, "Tried to free freed device heap!");
+		ASSERT(!Heap->Free, "Tried to free freed device heap!");
+		ASSERT(Index < DeviceHeapCount, "VkDeviceFree: allocation index is out of bounds.");
 		Heap->Free = true;
+		//Merge every free block until the end.
+		for(u32 i = 1; Index >= i; Heap = &DeviceHeaps[Index-i], i++)
+		{
+			if(Heap->Free)
+			{
+				device_heap_t *Prev = &DeviceHeaps[(Index-i)+1];
+				Heap->Size += Prev->Size;
+				memset(Prev, 0, sizeof(device_heap_t));
+			}	
+			else
+			{
+				break;
+			}
+		}
 		return;
 	}
-	//Basic O(n) search
-	for(u32 i = 0; i < DeviceHeapCount; i++)
+	else
 	{
-		Heap = &DeviceHeaps[i];
-		if(Heap->DeviceMemory == DeviceMemory && Heap->Offset == Offset)
+		for(u32 i = 0; i < DeviceHeapCount; i++)
 		{
-			ASSERT(Heap->Free, "Tried to free freed device heap!");
-			Heap->Free = true;
-			return;
+			Heap = &DeviceHeaps[i];
+			if(Heap->DeviceMemory == DeviceMemory)
+			{
+				//NOTE(Kyryl): There will be holes left over. 
+				memset(Heap, 0, sizeof(device_heap_t));
+			}
 		}
+		vkFreeMemory(LogicalDevice, DeviceMemory, VkAllocators);
 	}
 
 }
@@ -2190,6 +2209,17 @@ out:;
 	//Create a 2d texture to serve as pixel buffer. 
 	//Implements an ability to write pixels directly to the screen.
 	//PixelImageView = CreateImageView(SwchImageFormat, VK_IMAGE_VIEW_TYPE_2D, PixelImage);
+
+	texture_t PixelTexture;
+	PixelTexture.Data = malloc(SwchImageSize.width * SwchImageSize.height);
+	PixelTexture.Width = SwchImageSize.width;
+	PixelTexture.Height = SwchImageSize.height;
+	PixelTexture.ImageType = VK_IMAGE_TYPE_2D;
+	PixelTexture.ImageViewType = VK_IMAGE_VIEW_TYPE_2D;
+	PixelTexture.Format = SwchImageFormat;
+	PixelTexture.Usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	CreateTexture(&PixelTexture);
 
 	VkDescriptorImageInfo DescriptorII;
 	DescriptorII.sampler = PointSampler;
