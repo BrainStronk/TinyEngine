@@ -233,6 +233,23 @@ void SurfaceCallback(VkSurfaceKHR* Surface)
 	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
 }
 
+u8 *Tiny_ReadFile(const char* Filename, s32 *Size)
+{
+	FILE* File = fopen(Filename, "rb");
+	ASSERT(File, "Shader file: %s not found!", Filename);
+
+	fseek(File, 0, SEEK_END);
+	*Size = ftell(File);
+	ASSERT(*Size >= 0, "Empty File.");
+	fseek(File, 0, SEEK_SET);
+
+	u8 *Buffer = (u8*) malloc(*Size);
+
+	u32 rc = fread(Buffer, 1, *Size, File);
+	ASSERT(rc == (u32)*Size, "Failed to read");
+	fclose(File);
+	return Buffer;
+}
 
 void ProcessEvents()
 {

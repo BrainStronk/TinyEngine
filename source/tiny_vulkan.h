@@ -1464,28 +1464,18 @@ void LoadShader(const char* Path)
 {
 	ASSERT(ShaderCount < NUM_SHADERS, "Out of shader modules, Increase NUM_SHADERS");
 
-	FILE* File = fopen(Path, "rb");
-	ASSERT(File, "Shader file: %s not found!", Path);
-
-	fseek(File, 0, SEEK_END);
-	s32 Length = ftell(File);
-	ASSERT(Length >= 0, "Empty File.");
-	fseek(File, 0, SEEK_SET);
-
-	char *Buffer[Length];
-
-	u32 rc = fread(Buffer, 1, Length, File);
-	ASSERT(rc == (u32)Length, "Failed to read");
-	fclose(File);
+	s32 Size;
+	u8 *Buffer = Tiny_ReadFile(Path, &Size);
 
 	VkShaderModuleCreateInfo ShaderModuleCI;
 	ShaderModuleCI.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	ShaderModuleCI.pNext = NULL;
 	ShaderModuleCI.flags = 0;
-	ShaderModuleCI.codeSize = Length;
+	ShaderModuleCI.codeSize = Size;
 	ShaderModuleCI.pCode = (const u32*)(Buffer);
 
 	VK_CHECK(vkCreateShaderModule(LogicalDevice, &ShaderModuleCI, 0, &VkShaderModules[ShaderCount]));
+	free(Buffer);
 	ShaderCount++;
 }
 
