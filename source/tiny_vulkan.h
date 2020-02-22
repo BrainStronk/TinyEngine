@@ -368,6 +368,8 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 void PostInit();
 VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkMemoryRequirements MemReq);
 void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory);
+void *ZMalloc(s32 Size, u8 Zoneid);
+void ZFree(void *Ptr, u8 Zoneid);
 //--------------------
 
 
@@ -512,6 +514,7 @@ texture_t TexturePool[NUM_TEXTURES];
 #define NUM_VBO_BUFFERS 10
 #define NUM_IBO_BUFFERS 10
 #define NUM_UBO_BUFFERS 10
+#define NUM_STAGING_BUFFERS 2
 //----------------------------------------------------
 VkPhysicalDeviceMemoryProperties DeviceMemoryProperties;
 
@@ -549,6 +552,20 @@ typedef struct ubo_t
 }ubo_t;
 ubo_t UniformBuffers[NUM_UBO_BUFFERS];
 
+u32 StagingIndex;
+typedef struct staging_t
+{
+	VkBuffer Buffer;
+	VkCommandBuffer CommandBuffer;
+	VkFence Fence;
+	VkDeviceMemory DeviceMemory;
+	b32 Submitted;
+	u32 Size;
+	u32 Offset;
+	void *Data;
+}staging_t;
+staging_t StagingBuffers[NUM_STAGING_BUFFERS];
+
 #define NUM_DEVICE_HEAPS 100
 u32 DeviceHeapCount;
 typedef struct device_heap_t
@@ -578,6 +595,8 @@ typedef struct
 {
 	s32 Size;		// total bytes malloced, including header
 	s32 Align;
+	volatile u32 MLock;	//Malloc to Free spinlock
+	volatile u32 FLock;
 	memblock_t Blocklist;	// start / end cap for linked list
 	memblock_t *Rover;
 } memzone_t;
@@ -833,6 +852,97 @@ void CreateTexture(texture_t *Texture)
 	TextureCount++;
 }
 
+void UploadTexture(texture_t *Texture)
+{
+	ASSERT(Texture->Data, "UploadTexture: Texture->Data == NULL");
+
+	u8 Size = Texture->Width * Texture->Height * 4;
+	u8 *Transfer = (u8*)ZMalloc(Size, 4);
+	memcpy(Transfer, Texture->Data, Size);
+
+	staging_t *StagingBuffer = &StagingBuffers[StagingIndex];
+
+	VkBufferImageCopy BufferIC;
+	BufferIC.bufferOffset = Transfer - (u8*)StagingBuffer->Data;
+	p("%d", BufferIC.bufferOffset);
+	BufferIC.bufferRowLength = 0;
+	BufferIC.bufferImageHeight = 0;
+	BufferIC.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	BufferIC.imageSubresource.mipLevel = 0;
+	BufferIC.imageSubresource.baseArrayLayer = 0;
+	BufferIC.imageSubresource.layerCount = 1;
+	BufferIC.imageOffset.x = 0;
+	BufferIC.imageOffset.y = 0;
+	BufferIC.imageOffset.z = 0;
+	BufferIC.imageExtent.width = Texture->Width;
+	BufferIC.imageExtent.height = Texture->Height;
+	BufferIC.imageExtent.depth = 1;
+
+	VkImageMemoryBarrier MemBarrier;
+	MemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	MemBarrier.pNext = NULL;
+	MemBarrier.srcAccessMask = 0;
+	MemBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+	MemBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	MemBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	MemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	MemBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	MemBarrier.image = Texture->Image;
+	MemBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	MemBarrier.subresourceRange.baseMipLevel = 0;
+	MemBarrier.subresourceRange.levelCount = 1;
+	MemBarrier.subresourceRange.baseArrayLayer = 0;
+	MemBarrier.subresourceRange.layerCount = 1;
+	vkCmdPipelineBarrier(StagingBuffer->CommandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &MemBarrier);
+
+	vkCmdCopyBufferToImage(StagingBuffer->CommandBuffer, StagingBuffer->Buffer, Texture->Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &BufferIC);
+
+	MemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	MemBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	MemBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	MemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	vkCmdPipelineBarrier(StagingBuffer->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &MemBarrier);
+}
+
+void SubmitStagingBuffer()
+{
+	staging_t *StagingBuffer = &StagingBuffers[StagingIndex];
+
+	VkMemoryBarrier BufferMemBarrier;
+	BufferMemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	BufferMemBarrier.pNext = NULL;
+	BufferMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	BufferMemBarrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+	vkCmdPipelineBarrier(StagingBuffer->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, 0, 0, &BufferMemBarrier, 0, NULL, 0, NULL);
+
+	vkEndCommandBuffer(StagingBuffer->CommandBuffer);
+
+	//TODO(Kyryl): Check, I think this flush is optional.
+	VkMappedMemoryRange MemRange;
+	MemRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+	MemRange.pNext = NULL;
+	MemRange.memory = StagingBuffer->DeviceMemory;
+	MemRange.offset = 0;
+	MemRange.size = VK_WHOLE_SIZE;
+	vkFlushMappedMemoryRanges(LogicalDevice, 1, &MemRange);
+
+	VkSubmitInfo SubmitInfo;
+	SubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	SubmitInfo.pNext = NULL;
+	SubmitInfo.waitSemaphoreCount = 0;
+	SubmitInfo.pWaitSemaphores = NULL;
+	SubmitInfo.pWaitDstStageMask = NULL;
+	SubmitInfo.commandBufferCount = 1;
+	SubmitInfo.pCommandBuffers = &StagingBuffer->CommandBuffer;
+	SubmitInfo.signalSemaphoreCount = 0;
+	SubmitInfo.pSignalSemaphores = NULL;
+
+	vkQueueSubmit(VkQueues[0], 1, &SubmitInfo, StagingBuffer->Fence);
+
+	StagingBuffer->Submitted = true;
+	StagingIndex++;
+}
+
 void DestroyDepthBuffer()
 {
 	vkDestroyImage(LogicalDevice, DepthBuffer, VkAllocators);
@@ -1083,6 +1193,7 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 {
 	s32 Extra;
 	memblock_t *Start, *Rover, *Newblock, *Base;
+	memzone_t *Zone = Mainzone[Zoneid];
 
 //
 // scan through the block list looking for the first free block
@@ -1092,20 +1203,36 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 #ifdef TINYENGINE_DEBUG
 	Size += sizeof(s32);		// space for memory trash tester
 #endif
-	Size = (Size + (Mainzone[Zoneid]->Align-1)) & -Mainzone[Zoneid]->Align;
+	Size = (Size + (Zone->Align-1)) & -Zone->Align;
 	//alignment must be consistent through out the allocator.
 
 	Base = Rover = Mainzone[Zoneid]->Rover;
 	Start = Base->Prev;
 
+	while(Zone->MLock || Zone->FLock){}
+	Zone->MLock = true;
+
 	do
 	{
 		if (Rover == Start)	// scaned all the way around the list
+		{
+			//NOTE(Kyryl):
+			//Not every allocation does check for NULL so
+			//also do notify here.
+			//TODO:
+			//Instead of returning NULL we can do another OS allocation here
+			//and link the last node of that to the blocklist.
+			Error("ZMalloc failed!");
 			return NULL;
+		}
 		if (Rover->Tag)
+		{
 			Base = Rover = Rover->Next;
+		}
 		else
+		{
 			Rover = Rover->Next;
+		}
 	}
 	while (Base->Tag || Base->Size < Size);
 
@@ -1131,7 +1258,7 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 
 	Base->Tag = 1;				// no longer a free block
 
-	Mainzone[Zoneid]->Rover = Base->Next;	// next allocation will start looking here
+	Zone->Rover = Base->Next;	// next allocation will start looking here
 	
 #ifdef TINYENGINE_DEBUG
 	// marker for memory trash testing
@@ -1139,18 +1266,20 @@ void *ZMalloc(s32 Size, u8 Zoneid)
 	*(int *)((u8*)Base + Base->Size - sizeof(s32)) = ZONEID;
 #endif
 
+	Zone->MLock = false;
 	return (void *) ((u8 *)Base + sizeof(memblock_t));
 }
 
 void ZFree(void *Ptr, u8 Zoneid)
 {
 	memblock_t *Block, *Other;
-	
+	memzone_t *Zone; 
 	if (!Ptr)
 	{
 		return;
 	}
 
+	Zone = Mainzone[Zoneid];
 	Block = (memblock_t *) ( (unsigned char *)Ptr - sizeof(memblock_t));
 #ifdef TINYENGINE_DEBUG
 	if (Block->Id != ZONEID)
@@ -1162,6 +1291,10 @@ void ZFree(void *Ptr, u8 Zoneid)
 		Warn("ZFree: freed a freed pointer zoneid: %d", Zoneid);
 	}
 #endif
+
+	while(Zone->MLock || Zone->FLock){}
+	Zone->FLock = true;
+
 	Block->Tag = 0;	// mark as free
 
 	Other = Block->Prev;
@@ -1171,8 +1304,8 @@ void ZFree(void *Ptr, u8 Zoneid)
 		Other->Size += Block->Size;
 		Other->Next = Block->Next;
 		Other->Next->Prev = Other;
-		if (Block == Mainzone[Zoneid]->Rover)
-			Mainzone[Zoneid]->Rover = Other;
+		if (Block == Zone->Rover)
+			Zone->Rover = Other;
 		Block = Other;
 	}
 
@@ -1183,9 +1316,10 @@ void ZFree(void *Ptr, u8 Zoneid)
 		Block->Size += Other->Size;
 		Block->Next = Other->Next;
 		Block->Next->Prev = Block;
-		if (Other == Mainzone[Zoneid]->Rover)
-			Mainzone[Zoneid]->Rover = Block;
+		if (Other == Zone->Rover)
+			Zone->Rover = Block;
 	}
+	Zone->FLock = false;
 }
 
 void *ZRealloc(void *Ptr, int Size, u8 Zoneid)
@@ -2060,6 +2194,7 @@ out:;
 
 	ASSERT(NUM_COMMAND_BUFFERS > SwchImageCount+1, "More command buffers needed, increase NUM_COMMAND_BUFFERS");
 
+
 	//MEMORY
 	Trace("Reached target: Memory Init");
 	vkGetPhysicalDeviceMemoryProperties(GpuDevice, &DeviceMemoryProperties);
@@ -2079,6 +2214,33 @@ out:;
 	UniformBuffers[0].Data = VkHostMalloc(UniformBuffers[0].Size, &UniformBuffers[0].Buffer, &UniformBuffers[0].DeviceMemory, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
 	// Align to 256 bytes (ref spec)
 	ZInitZone(UniformBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
+
+	//STAGING BUFFERS
+	StagingBuffers[0].Size = 4194304; //4096 * 1024
+	StagingBuffers[0].Data = VkHostMalloc(StagingBuffers[0].Size, &StagingBuffers[0].Buffer, &StagingBuffers[0].DeviceMemory,
+	VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	ZInitZone(StagingBuffers[0].Data, StagingBuffers[0].Size, 4, 4);
+	ASSERT(NUM_STAGING_BUFFERS < NUM_FENCES - SwchImageCount, "Increase NUM_FENCES");
+	ASSERT(NUM_STAGING_BUFFERS < NUM_COMMAND_BUFFERS - SwchImageCount, "Increase NUM_COMMAND_BUFFERS");
+	for(i = 0; i < NUM_STAGING_BUFFERS; i++)
+	{
+		//Dont't mix render sync and staging 
+		StagingBuffers[i].CommandBuffer = VkCommandBuffers[SwchImageCount+i];
+		StagingBuffers[i].Fence = VkFences[SwchImageCount+i];
+
+		//Set into recording state
+		VkCommandBufferBeginInfo CommandBufferBI;
+		CommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		CommandBufferBI.pNext = NULL;
+		CommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
+		CommandBufferBI.pInheritanceInfo = NULL;
+
+		VK_MCHECK(vkBeginCommandBuffer(StagingBuffers[i].CommandBuffer, &CommandBufferBI),"vkBeginCommandBuffer failed!");
+	}
+	//STAGING BUFFERS
+
+
 	//End MEMORY
 
 	//SAMPLERS
@@ -2223,15 +2385,16 @@ out:;
 
 	VkDescriptorImageInfo DescriptorII;
 	DescriptorII.sampler = PointSampler;
-	DescriptorII.imageView = VkSwchImageViews[0]; //this is a stub for now.
+	DescriptorII.imageView = PixelTexture.ImageView; 
 	DescriptorII.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 	WriteDS.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	WriteDS.pBufferInfo = NULL; //this is not a uniform buffer. 
 	WriteDS.pImageInfo = &DescriptorII;
 	WriteDS.dstSet = FragSamplerDescriptorSet;
-	//vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
-//
+	vkUpdateDescriptorSets(LogicalDevice, 1, &WriteDS, 0, NULL);
+
+	UploadTexture(&PixelTexture);
 
 	//End DESCRIPTOR SETS
 
@@ -2354,7 +2517,6 @@ out:;
 	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[0]));
 
 	CreateBasicShaderPipeline(VK_POLYGON_MODE_FILL);
-
 
 	//End SHADERS & PIPELINE
 

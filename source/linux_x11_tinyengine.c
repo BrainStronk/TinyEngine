@@ -142,7 +142,9 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 
 	/* Get current time */
 	time_t t = time(NULL);
-	struct tm *lt = localtime(&t);
+	struct tm lt;
+	memcpy(&lt, localtime(&t), sizeof(struct tm));
+
 
 	/* Log to terminal */
 	if (!LogQuiet)
@@ -151,7 +153,7 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 		if(LogExtra)
 		{
 			char buf[16] = {0};
-			buf[strftime(buf, sizeof(buf), "%H:%M:%S", lt)] = '\0';
+			buf[strftime(buf, sizeof(buf), "%H:%M:%S", &lt)] = '\0';
 #ifdef LOG_USE_COLOR
 			FormatString(buf, "%s %s%-5s\x1b[0m \x1b[90m%s:%d:\x1b[0m ",
 					buf, level_colors[Level], level_names[Level], File, Line);
@@ -182,7 +184,7 @@ void LogLog(s32 Level, const char *File, s32 Line, const char *Fmt, ...)
 		if(LogExtra)
 		{
 			char buf[32] = {0};
-			buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", lt)] = '\0';
+			buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", &lt)] = '\0';
 			FormatString(buf, "%s %-5s %s:%d: ", buf, level_names[Level], File, Line);
 			fputs(buf, Logfp);
 		}
