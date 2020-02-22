@@ -1475,7 +1475,7 @@ void LoadShader(const char* Path)
 	ShaderModuleCI.pCode = (const u32*)(Buffer);
 
 	VK_CHECK(vkCreateShaderModule(LogicalDevice, &ShaderModuleCI, 0, &VkShaderModules[ShaderCount]));
-	free(Buffer);
+	Tiny_Free(Buffer);
 	ShaderCount++;
 }
 
