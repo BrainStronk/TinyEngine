@@ -312,6 +312,12 @@ typedef struct tiny_platform
 
 tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
 
-u8 *Tiny_ReadFile(const char* Filename, s32 *Size);
+//TODO(Kyryl): 
+//This is maybe temporary, not 100% sure yet if will be in 
+//dynamic function pointer table. Implement this table first.
+u8 *Tiny_ReadFile(const char *Filename, s32 *Size);
+void* Tiny_Malloc(u64 Size);
+void Tiny_Free(void *Ptr);
+
 
 #endif // TINYENGINE_H

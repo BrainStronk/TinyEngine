@@ -1874,7 +1874,7 @@ _continue:;
 	//allocators = NULL;
 	if(VkAllocators)
 	{
-		void *VkMemory = malloc(8000000); //8MB
+		void *VkMemory = Tiny_Malloc(8000000); //8MB
 		ZInitZone(VkMemory, 8000000, 8, 0);
 		VkAllocators->pUserData = NULL;
 		VkAllocators->pfnAllocation = VkAlloc;
@@ -1946,7 +1946,7 @@ _continue:;
 		{
 			//Found a Gpu
 			u32 Size = (sizeof(VkExtensionProperties)  *DeviceExtensionCount);
-			VkDeviceExtensionProperties = (VkExtensionProperties*) malloc(Size);
+			VkDeviceExtensionProperties = (VkExtensionProperties*) Tiny_Malloc(Size);
 			memcpy(VkDeviceExtensionProperties, ExtensionProperties, Size);
 			DeviceExtPropCount = DeviceExtensionCount;
 			GpuDevice = Devices[i];
@@ -2102,7 +2102,7 @@ __continue:;
 	}
 	SwchImageCount += 1;
 
-	VkSwchImageViews = (VkImageView*) malloc(sizeof(VkImageView) * SwchImageCount);
+	VkSwchImageViews = (VkImageView*) Tiny_Malloc(sizeof(VkImageView) * SwchImageCount);
 
 	VkImageUsageFlags TmpImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	SwchImageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |  VK_IMAGE_USAGE_TRANSFER_DST_BIT;
@@ -2171,7 +2171,7 @@ out:;
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, NULL));
 	ASSERT(ImageCount, "Failed to get swapchain image count.");
 
-	VkSwchImages = (VkImage*) malloc(sizeof(VkImage) * ImageCount);
+	VkSwchImages = (VkImage*) Tiny_Malloc(sizeof(VkImage) * ImageCount);
 
 	VK_CHECK(vkGetSwapchainImagesKHR(LogicalDevice, VkSwapchains[0], &ImageCount, &VkSwchImages[0]));
 
@@ -2412,7 +2412,7 @@ out:;
 	//PixelImageView = CreateImageView(SwchImageFormat, VK_IMAGE_VIEW_TYPE_2D, PixelImage);
 
 	texture_t PixelTexture;
-	PixelTexture.Data = malloc(SwchImageSize.width * SwchImageSize.height);
+	PixelTexture.Data = Tiny_Malloc(SwchImageSize.width * SwchImageSize.height);
 	PixelTexture.Width = SwchImageSize.width;
 	PixelTexture.Height = SwchImageSize.height;
 	PixelTexture.ImageType = VK_IMAGE_TYPE_2D;

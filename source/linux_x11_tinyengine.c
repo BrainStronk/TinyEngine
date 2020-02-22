@@ -11,6 +11,7 @@
 #include <string.h>
 #include <dlfcn.h>
 #include <time.h>
+#include <sys/mman.h>
 
 #include "tinyengine.h"
 
@@ -233,7 +234,7 @@ void SurfaceCallback(VkSurfaceKHR* Surface)
 	VK_CHECK(vkCreateXlibSurfaceKHR(Instance, &SurfaceCI, NULL, Surface));
 }
 
-u8 *Tiny_ReadFile(const char* Filename, s32 *Size)
+u8 *Tiny_ReadFile(const char *Filename, s32 *Size)
 {
 	FILE* File = fopen(Filename, "rb");
 	ASSERT(File, "Shader file: %s not found!", Filename);
@@ -249,6 +250,21 @@ u8 *Tiny_ReadFile(const char* Filename, s32 *Size)
 	ASSERT(rc == (u32)*Size, "Failed to read");
 	fclose(File);
 	return Buffer;
+}
+
+
+void* Tiny_Malloc(u64 Size)
+{
+	Size += sizeof(u64);
+	void *Ptr = mmap(0, Size, PROT_WRITE | PROT_READ, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	*(u64*)Ptr = Size;
+	return (void*)((u8*)Ptr + sizeof(u64));
+}
+
+void Tiny_Free(void *Ptr)
+{
+	u64 Size = *(u64*)((u8*)Ptr - sizeof(u64));
+	munmap(Ptr, Size);
 }
 
 void ProcessEvents()
