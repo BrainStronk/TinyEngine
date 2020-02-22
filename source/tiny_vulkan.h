@@ -559,6 +559,7 @@ typedef struct staging_t
 	VkCommandBuffer CommandBuffer;
 	VkFence Fence;
 	VkDeviceMemory DeviceMemory;
+	b32 Pending;
 	b32 Submitted;
 	u32 Size;
 	u32 Offset;
@@ -864,7 +865,6 @@ void UploadTexture(texture_t *Texture)
 
 	VkBufferImageCopy BufferIC;
 	BufferIC.bufferOffset = Transfer - (u8*)StagingBuffer->Data;
-	p("%d", BufferIC.bufferOffset);
 	BufferIC.bufferRowLength = 0;
 	BufferIC.bufferImageHeight = 0;
 	BufferIC.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -902,11 +902,58 @@ void UploadTexture(texture_t *Texture)
 	MemBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	MemBarrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	vkCmdPipelineBarrier(StagingBuffer->CommandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &MemBarrier);
+	StagingBuffer->Pending = true;
 }
 
-void SubmitStagingBuffer()
+void ResetStagingBuffer()
 {
 	staging_t *StagingBuffer = &StagingBuffers[StagingIndex];
+	if(!StagingBuffer->Submitted)
+	{
+		Warn("ResetStagingBuffer: Unsubmitted buffer. %d", StagingIndex);
+		return; 
+	}
+
+	VK_CHECK(vkWaitForFences(LogicalDevice, 1, &StagingBuffer->Fence, VK_TRUE, UINT64_MAX));
+
+	VK_CHECK(vkResetFences(LogicalDevice, 1, &StagingBuffer->Fence));
+
+	VkCommandBufferBeginInfo CommandBufferBI;
+	CommandBufferBI.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	CommandBufferBI.pNext = NULL;
+	CommandBufferBI.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT; 
+	CommandBufferBI.pInheritanceInfo = NULL;
+
+	VK_MCHECK(vkBeginCommandBuffer(StagingBuffer->CommandBuffer, &CommandBufferBI),"vkBeginCommandBuffer failed!");
+
+	ZFree(StagingBuffer->Data, 4);
+	StagingBuffer->Data = NULL;
+	StagingBuffer->Offset = 0;
+	StagingBuffer->Pending = false;
+	StagingBuffer->Submitted = false;
+	//Prevent u32 overflow.
+	if(StagingIndex == 0)
+	{
+		return;
+	}
+	StagingIndex--;
+}
+
+b32 SubmitStagingBuffer()
+{
+	if(StagingIndex == NUM_STAGING_BUFFERS)
+	{
+		StagingIndex--;
+		for(u32 i = 0; i < NUM_STAGING_BUFFERS; i++)
+		{
+			ResetStagingBuffer();
+		}
+	}
+	staging_t *StagingBuffer = &StagingBuffers[StagingIndex];
+	if(StagingBuffer->Pending == false)
+	{
+		return false; 
+	}
 
 	VkMemoryBarrier BufferMemBarrier;
 	BufferMemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -941,6 +988,7 @@ void SubmitStagingBuffer()
 
 	StagingBuffer->Submitted = true;
 	StagingIndex++;
+	return true;
 }
 
 void DestroyDepthBuffer()
@@ -2237,6 +2285,7 @@ out:;
 		CommandBufferBI.pInheritanceInfo = NULL;
 
 		VK_MCHECK(vkBeginCommandBuffer(StagingBuffers[i].CommandBuffer, &CommandBufferBI),"vkBeginCommandBuffer failed!");
+		VK_CHECK(vkResetFences(LogicalDevice, 1, &StagingBuffers[i].Fence));
 	}
 	//STAGING BUFFERS
 
@@ -2617,6 +2666,8 @@ wait:
 		VK_CHECK(result);
 		return;
 	}
+
+	while(SubmitStagingBuffer()){/*nothing*/};
 
 	CommandBuffer = VkCommandBuffers[ImageIndex];
 
