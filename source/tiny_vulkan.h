@@ -368,8 +368,14 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 void PostInit();
 VkDeviceSize VkDeviceMalloc(VkDeviceSize Size, VkDeviceMemory *DeviceMemory, VkMemoryRequirements MemReq);
 void VkDeviceFree(u32 Index, VkDeviceMemory DeviceMemory);
+void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid);
+void ZReset(u8 Zoneid);
 void *ZMalloc(s32 Size, u8 Zoneid);
 void ZFree(void *Ptr, u8 Zoneid);
+u8 *StagingDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset);
+u8 *VboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset);
+u8 *IboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset);
+u8 *UboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset);
 //--------------------
 
 
@@ -405,6 +411,8 @@ VkAllocationCallbacks *VkAllocators = &Allocator;
 VkInstance Instance;
 VkDebugReportCallbackEXT VulkanDebugCallback;
 u32 CurrentFrame; 
+u8 ColorPalette[768];
+u32 U32Palette[256];
 //-----------------------------------------------------
 
 //Gpu init:
@@ -514,7 +522,7 @@ texture_t TexturePool[NUM_TEXTURES];
 #define NUM_VBO_BUFFERS 10
 #define NUM_IBO_BUFFERS 10
 #define NUM_UBO_BUFFERS 10
-#define NUM_STAGING_BUFFERS 2
+#define NUM_STAGING_BUFFERS 1
 //----------------------------------------------------
 VkPhysicalDeviceMemoryProperties DeviceMemoryProperties;
 
@@ -524,7 +532,7 @@ typedef struct vbo_t
 	VkBuffer Buffer;
 	VkDeviceMemory DeviceMemory;
 	u32 Size;
-	u32 Offset;
+	VkDeviceSize Offset;
 	void *Data;
 }vbo_t;
 vbo_t VertexBuffers[NUM_VBO_BUFFERS];
@@ -535,7 +543,7 @@ typedef struct ibo_t
 	VkBuffer Buffer;
 	VkDeviceMemory DeviceMemory;
 	u32 Size;
-	u32 Offset;
+	VkDeviceSize Offset;
 	void *Data;
 }ibo_t;
 ibo_t IndexBuffers[NUM_IBO_BUFFERS];
@@ -547,7 +555,7 @@ typedef struct ubo_t
 	VkBuffer Buffer;
 	VkDeviceMemory DeviceMemory;
 	u32 Size;
-	u32 Offset;
+	VkDeviceSize Offset;
 	void *Data;
 }ubo_t;
 ubo_t UniformBuffers[NUM_UBO_BUFFERS];
@@ -562,7 +570,7 @@ typedef struct staging_t
 	b32 Pending;
 	b32 Submitted;
 	u32 Size;
-	u32 Offset;
+	VkDeviceSize Offset;
 	void *Data;
 }staging_t;
 staging_t StagingBuffers[NUM_STAGING_BUFFERS];
@@ -634,10 +642,64 @@ typedef struct
 	float tex_coord[2]; // = vec2
 	float color[3]; // = vec3
 } Vertex;
+
+texture_t PixelTexture;
 //SHADER RESOURCES
 
+//CONTAINER
+
+#define VkStack(T, n) struct { u32 Idx; T Items[n]; }
+
+#define VkPush(stk, val) do {                                                 \
+    ASSERT((stk).Idx < (s32) (sizeof((stk).Items) / sizeof(*(stk).Items)), ""); \
+    (stk).Items[ (stk).Idx ] = (val);                                       \
+    (stk).Idx++;                                                            \
+  } while (0)
+
+
+#define VkPop(stk) do {      \
+    ASSERT((stk).Idx > 0, ""); \
+    (stk).Idx--;           \
+  } while (0)
+
+VkStack(u32, 1000) IdContainer;
+VkStack(u8*, 1000) VpContainer;
+VkStack(u8*, 1000) IpContainer;
+
+//CONTAINER
 
 //----------------------------------------------------VULKAN GLOBALS
+
+/* 32bit fnv-1a hash */
+#define HASH_INITIAL 2166136261
+void VkHash(u32 *Hash, const void *Data, u32 Size)
+{
+	const u8 *p = (const u8*) Data;
+	while (Size--)
+	{
+		*Hash = (*Hash ^ *p++) * 16777619;
+	}
+}
+
+u32 VkGetId(const void *Data, u32 Size)
+{
+	u32 Idx = IdContainer.Idx;
+	u32 Res = (Idx > 0) ? IdContainer.Items[Idx - 1] : HASH_INITIAL;
+	VkHash(&Res, Data, Size);
+	return Res;
+}
+
+s32 VkIdExists(u32 Id)
+{
+	for(u32 i = 0; i < IdContainer.Idx; i++)
+	{
+		if(IdContainer.Items[i] == Id)
+		{
+			return i;
+		}		
+	}
+	return -1;
+}
 
 const char *GetVulkanResultString(VkResult result)
 {
@@ -857,14 +919,16 @@ void UploadTexture(texture_t *Texture)
 {
 	ASSERT(Texture->Data, "UploadTexture: Texture->Data == NULL");
 
-	u8 Size = Texture->Width * Texture->Height * 4;
-	u8 *Transfer = (u8*)ZMalloc(Size, 4);
-	memcpy(Transfer, Texture->Data, Size);
-
 	staging_t *StagingBuffer = &StagingBuffers[StagingIndex];
 
+	VkDeviceSize Size = Texture->Width * Texture->Height * 4;
+	VkDeviceSize Offset;
+	u8 *Transfer = StagingDigress(Size, StagingIndex, &Offset);
+	memcpy(Transfer, Texture->Data, Size);
+
+
 	VkBufferImageCopy BufferIC;
-	BufferIC.bufferOffset = Transfer - (u8*)StagingBuffer->Data;
+	BufferIC.bufferOffset = Offset;
 	BufferIC.bufferRowLength = 0;
 	BufferIC.bufferImageHeight = 0;
 	BufferIC.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -882,7 +946,7 @@ void UploadTexture(texture_t *Texture)
 	MemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	MemBarrier.pNext = NULL;
 	MemBarrier.srcAccessMask = 0;
-	MemBarrier.dstAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
+	MemBarrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 	MemBarrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	MemBarrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 	MemBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -926,8 +990,6 @@ void ResetStagingBuffer()
 
 	VK_MCHECK(vkBeginCommandBuffer(StagingBuffer->CommandBuffer, &CommandBufferBI),"vkBeginCommandBuffer failed!");
 
-	ZFree(StagingBuffer->Data, 4);
-	StagingBuffer->Data = NULL;
 	StagingBuffer->Offset = 0;
 	StagingBuffer->Pending = false;
 	StagingBuffer->Submitted = false;
@@ -956,7 +1018,7 @@ b32 SubmitStagingBuffer()
 	}
 
 	VkMemoryBarrier BufferMemBarrier;
-	BufferMemBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	BufferMemBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
 	BufferMemBarrier.pNext = NULL;
 	BufferMemBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 	BufferMemBarrier.dstAccessMask = VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
@@ -964,7 +1026,7 @@ b32 SubmitStagingBuffer()
 
 	vkEndCommandBuffer(StagingBuffer->CommandBuffer);
 
-	//TODO(Kyryl): Check, I think this flush is optional.
+	//TODO(Kyryl): Check, I think this flush is optional on integrated GPUs.
 	VkMappedMemoryRange MemRange;
 	MemRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
 	MemRange.pNext = NULL;
@@ -1071,11 +1133,66 @@ s32 MemoryTypeFromProperties(u32 type_bits, VkFlags requirements_mask, VkFlags p
 	return 0;
 }
 
+void GenerateColorPalette()
+{
+	u8* dst = ColorPalette;
+	for(int i = 0; i < 256; i++)
+	{
+		unsigned char r = 127 * (1 + sin(5 * i * 6.28318531 / 16));
+		unsigned char g = 127 * (1 + sin(2 * i * 6.28318531 / 16));
+		unsigned char b = 127 * (1 + sin(3 * i * 6.28318531 / 16));
+		*dst++ = r;
+		*dst++ = g;
+		*dst++ = b;
+	}
+
+	dst = (u8*)U32Palette;
+	unsigned char* src = ColorPalette;
+	for (int i = 0; i < 256; i++)
+	{
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = *src++;
+		*dst++ = 255;
+	}
+
+}
+
+unsigned *Tex8To32(u8 *In, s32 Pixels, u32 *Usepal)
+{
+	unsigned *Out, *Data;
+	Out = Data = (unsigned *) Tiny_Malloc(Pixels*4);
+	for (s32 i = 0; i < Pixels; i++)
+	{
+		*Out++ = Usepal[*In++];
+	}
+	Tiny_Free(In);
+	return Data;
+}
+
+u8 *SampleTexture(u32 w, u32 h)
+{
+	//generate some image
+	u8 *Image = (u8*)Tiny_Malloc(w * h);
+	for(unsigned y = 0; y < h; y++)
+	{
+		for(unsigned x = 0; x < w; x++)
+		{
+			u32 ByteIndex = (y * w + x);
+			s32 Color = (s32)(4 * ((1 + sin(2.0 * 6.28318531 * x / (double)w))
+						+ (1 + sin(2.0 * 6.28318531 * y / (double)h))) );
+			Image[ByteIndex] |= (unsigned char)(Color << (0));
+		}
+	}
+	Image = (u8*)Tex8To32(Image, (w * h), U32Palette);
+	return Image;
+}
+
 //NOTE(Kyryl):
 //These tiny allocators are designed for permanent objects.
 //Incompatible with SGM, use .Offset member in struct to keep
 //track of position. 
-u8 *VboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+u8 *VboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	*Offset = VertexBuffers[BufIndex].Offset;
 	ASSERT(*Offset + Size < VertexBuffers[BufIndex].Size, "VboDigress: out of memory");
@@ -1084,7 +1201,7 @@ u8 *VboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
 	return Data;
 }
 
-u8 *IboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+u8 *IboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	Size = (Size + (sizeof(u32)-1)) & -sizeof(u32);
 	*Offset = IndexBuffers[BufIndex].Offset;
@@ -1094,7 +1211,7 @@ u8 *IboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
 	return Data;
 }
 
-u8 *UboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
+u8 *UboDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	Size = (Size + (256-1)) & -256;
 	*Offset = UniformBuffers[BufIndex].Offset;
@@ -1103,10 +1220,20 @@ u8 *UboDigress(u32 Size, u8 BufIndex, VkDeviceSize *Offset)
 	UniformBuffers[BufIndex].Offset += Size;
 	return Data;
 }
+
+u8 *StagingDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset)
+{
+	Size = (Size + (sizeof(u32)-1)) & -sizeof(u32);
+	*Offset = StagingBuffers[BufIndex].Offset;
+	ASSERT(*Offset + Size < StagingBuffers[BufIndex].Size, "UboDigress: out of memory");
+	u8 *Data = (u8*)StagingBuffers[BufIndex].Data + *Offset;
+	StagingBuffers[BufIndex].Offset += Size;
+	return Data;
+}
 //NOTE(Kyryl):
 //There will be one huge buffer, so in theory this function
 //should be called only once per memory type, but may be used in case of scarcity
-void *VkHostMalloc(u32 Size, VkBuffer *Buffer, VkDeviceMemory *DeviceMemory, VkBufferUsageFlagBits Usage)
+void *VkHostMalloc(VkDeviceSize Size, VkBuffer *Buffer, VkDeviceMemory *DeviceMemory, VkBufferUsageFlagBits Usage)
 {
 	VkBufferCreateInfo BufferCI;
 	BufferCI.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1414,6 +1541,23 @@ void *ZRealloc(void *Ptr, int Size, u8 Zoneid)
 	return Ptr;
 }
 
+void ZReset(u8 Zoneid)
+{
+	memblock_t *Block;
+	memzone_t *Zone = Mainzone[Zoneid];
+
+	for (Block = Zone->Blocklist.Next ; ; Block = Block->Next)
+	{
+		if (Block == &Zone->Blocklist)
+		{
+			break;	// all blocks have been hit
+		}
+		Block->Prev->Next = NULL;
+		Block->Prev->Tag = 0;
+		Block->Prev->Size = 0;
+	}
+}
+
 void ZInitZone(void *Mem, u32 Size, u32 Align, u8 Zoneid)
 {
 	memblock_t *Block;
@@ -1460,6 +1604,9 @@ void VkFree(void *pusd, void *ptr)
 	return;
 }
 
+//NOTE(Kyryl):
+//The reason we are storing shadermodules in global array
+//is so that we can easily iterate over them, and destroy when needed.
 void LoadShader(const char* Path)
 {
 	ASSERT(ShaderCount < NUM_SHADERS, "Out of shader modules, Increase NUM_SHADERS");
@@ -1493,29 +1640,59 @@ void LoadHexShader(const u32 *Buffer, u32 Size)
 	ShaderCount++;
 }
 
-void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
+void CreateShaderPipelines()
 {
-	VkShaderModule vs = VkShaderModules[0];
-	VkShaderModule fs = VkShaderModules[1];
 
-	ASSERT(vs, "Failed to load Vertex Shader.");
-	ASSERT(fs, "Failed to load Fragment Shader.");
+//TEMPLATE
 
-	VkPipelineShaderStageCreateInfo ShaderStageCI[2];
+	VkPipelineShaderStageCreateInfo ShaderStageCI[6];
 	ShaderStageCI[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	ShaderStageCI[0].pNext = NULL;
 	ShaderStageCI[0].flags = 0;
 	ShaderStageCI[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-	ShaderStageCI[0].module = vs;
+	ShaderStageCI[0].module = VK_NULL_HANDLE;
 	ShaderStageCI[0].pName = "main";
 	ShaderStageCI[0].pSpecializationInfo = NULL;
+
 	ShaderStageCI[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	ShaderStageCI[1].pNext = NULL;
 	ShaderStageCI[1].flags = 0;
 	ShaderStageCI[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	ShaderStageCI[1].module = fs;
+	ShaderStageCI[1].module = VK_NULL_HANDLE;
 	ShaderStageCI[1].pName = "main";
 	ShaderStageCI[1].pSpecializationInfo = NULL;
+
+	ShaderStageCI[2].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[2].pNext = NULL;
+	ShaderStageCI[2].flags = 0;
+	ShaderStageCI[2].stage = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+	ShaderStageCI[2].module = VK_NULL_HANDLE;
+	ShaderStageCI[2].pName = "main";
+	ShaderStageCI[2].pSpecializationInfo = NULL;
+
+	ShaderStageCI[3].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[3].pNext = NULL;
+	ShaderStageCI[3].flags = 0;
+	ShaderStageCI[3].stage = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+	ShaderStageCI[3].module = VK_NULL_HANDLE;
+	ShaderStageCI[3].pName = "main";
+	ShaderStageCI[3].pSpecializationInfo = NULL;
+
+	ShaderStageCI[4].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[4].pNext = NULL;
+	ShaderStageCI[4].flags = 0;
+	ShaderStageCI[4].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+	ShaderStageCI[4].module = VK_NULL_HANDLE;
+	ShaderStageCI[4].pName = "main";
+	ShaderStageCI[4].pSpecializationInfo = NULL;
+
+	ShaderStageCI[5].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	ShaderStageCI[5].pNext = NULL;
+	ShaderStageCI[5].flags = 0;
+	ShaderStageCI[5].stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	ShaderStageCI[5].module = VK_NULL_HANDLE;
+	ShaderStageCI[5].pName = "main";
+	ShaderStageCI[5].pSpecializationInfo = NULL;
 
 	VkPipelineInputAssemblyStateCreateInfo InputAssemblyCI;
 	InputAssemblyCI.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -1539,7 +1716,7 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 	RasterizationStateCI.flags = 0;
 	RasterizationStateCI.depthClampEnable = VK_FALSE;
 	RasterizationStateCI.rasterizerDiscardEnable = VK_FALSE;
-	RasterizationStateCI.polygonMode = PolygonMode;
+	RasterizationStateCI.polygonMode = VK_POLYGON_MODE_FILL;
 	RasterizationStateCI.cullMode = VK_CULL_MODE_NONE;
 	RasterizationStateCI.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	RasterizationStateCI.depthBiasEnable = VK_FALSE;
@@ -1658,7 +1835,29 @@ void CreateBasicShaderPipeline(VkPolygonMode PolygonMode)
 	PipelineCI.basePipelineHandle = 0;
 	PipelineCI.basePipelineIndex = 0;
 
+//TEMPLATE
+
+	VkShaderModule vs = VkShaderModules[0];
+	VkShaderModule fs = VkShaderModules[1];
+	ASSERT(vs, "Failed to load Vertex Shader.");
+	ASSERT(fs, "Failed to load Fragment Shader.");
+
+	ShaderStageCI[0].module = vs;
+	ShaderStageCI[1].module = fs;
+	PipelineCI.stageCount = 2;
+	PipelineCI.layout = VkPipelineLayouts[0];
 	VK_CHECK(vkCreateGraphicsPipelines(LogicalDevice, PipelineCache, 1, &PipelineCI, 0, &VkPipelines[0]));
+
+	vs = VkShaderModules[0];
+	fs = VkShaderModules[2];
+	ASSERT(vs, "Failed to load Vertex Shader.");
+	ASSERT(fs, "Failed to load Fragment Shader.");
+	ShaderStageCI[0].module = vs;
+	ShaderStageCI[1].module = fs;
+	PipelineCI.stageCount = 2;
+	PipelineCI.layout = VkPipelineLayouts[1];
+
+	VK_CHECK(vkCreateGraphicsPipelines(LogicalDevice, PipelineCache, 1, &PipelineCI, 0, &VkPipelines[1]));
 	return;
 }
 
@@ -2254,16 +2453,18 @@ out:;
 	ZInitZone(UniformBuffers[0].Data, UniformBuffers[0].Size, 256, 3);
 
 	//STAGING BUFFERS
-	StagingBuffers[0].Size = 4194304; //4096 * 1024
-	StagingBuffers[0].Data = VkHostMalloc(StagingBuffers[0].Size, &StagingBuffers[0].Buffer, &StagingBuffers[0].DeviceMemory,
-	VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	ZInitZone(StagingBuffers[0].Data, StagingBuffers[0].Size, 4, 4);
 	ASSERT(NUM_STAGING_BUFFERS < NUM_FENCES - SwchImageCount, "Increase NUM_FENCES");
 	ASSERT(NUM_STAGING_BUFFERS < NUM_COMMAND_BUFFERS - SwchImageCount, "Increase NUM_COMMAND_BUFFERS");
 	for(i = 0; i < NUM_STAGING_BUFFERS; i++)
 	{
-		//Dont't mix render sync and staging 
+		//Is not managed by SGM because it does not need to be.
+		//Memory is freed on buffer reset, so no need to do any explicit management.
+		StagingBuffers[i].Size = 4194304; //4096 * 1024
+		StagingBuffers[i].Data = VkHostMalloc(StagingBuffers[i].Size, &StagingBuffers[i].Buffer, &StagingBuffers[i].DeviceMemory,
+				VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		//Dont't mix render sync and staging.
+		//You could, but why if you can just have them separate, less complex IMO.
 		StagingBuffers[i].CommandBuffer = VkCommandBuffers[SwchImageCount+i];
 		StagingBuffers[i].Fence = VkFences[SwchImageCount+i];
 
@@ -2409,10 +2610,9 @@ out:;
 
 	//Create a 2d texture to serve as pixel buffer. 
 	//Implements an ability to write pixels directly to the screen.
-	//PixelImageView = CreateImageView(SwchImageFormat, VK_IMAGE_VIEW_TYPE_2D, PixelImage);
+	GenerateColorPalette(); //misc
 
-	texture_t PixelTexture;
-	PixelTexture.Data = Tiny_Malloc(SwchImageSize.width * SwchImageSize.height);
+	PixelTexture.Data = SampleTexture(SwchImageSize.width, SwchImageSize.height);
 	PixelTexture.Width = SwchImageSize.width;
 	PixelTexture.Height = SwchImageSize.height;
 	PixelTexture.ImageType = VK_IMAGE_TYPE_2D;
@@ -2528,14 +2728,17 @@ out:;
 #ifdef HEX_SHADERS
 #include "Vbasic.h"
 #include "Fbasic.h"
+#include "Fsampler2D.h"
 	LoadHexShader(Vbasic, ArrayCount(Vbasic)*sizeof(u32));
 	LoadHexShader(Fbasic, ArrayCount(Fbasic)*sizeof(u32));
+	LoadHexShader(Fsampler2D, ArrayCount(Fsampler2D)*sizeof(u32));
 #else
 	LoadShader("../source/shaders/Vbasic.spv");
 	LoadShader("../source/shaders/Fbasic.spv");
+	LoadShader("../source/shaders/Fsampler2D.spv");
 #endif
 
-	//The most simple layout.
+	//Basic
 	VkPipelineLayoutCreateInfo PipelineLayoutCI;
 	PipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	PipelineLayoutCI.pNext = NULL;
@@ -2546,16 +2749,13 @@ out:;
 	PipelineLayoutCI.pPushConstantRanges = NULL;
 	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[0]));
 
-	PipelineLayoutCI.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	PipelineLayoutCI.pNext = NULL;
-	PipelineLayoutCI.flags = 0;
-	PipelineLayoutCI.setLayoutCount = 0;
-	PipelineLayoutCI.pSetLayouts = NULL;
-	PipelineLayoutCI.pushConstantRangeCount = 0;
-	PipelineLayoutCI.pPushConstantRanges = NULL;
-	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[0]));
+	//Sampler
+	VkDescriptorSetLayout SetLayouts[] = {VertUniformDescriptorSetLayout, FragUniformDescriptorSetLayout, FragSamplerDescriptorSetLayout};
+	PipelineLayoutCI.setLayoutCount = ArrayCount(SetLayouts);
+	PipelineLayoutCI.pSetLayouts = SetLayouts;
+	VK_CHECK(vkCreatePipelineLayout(LogicalDevice, &PipelineLayoutCI, VkAllocators, &VkPipelineLayouts[1]));
 
-	CreateBasicShaderPipeline(VK_POLYGON_MODE_FILL);
+	CreateShaderPipelines(); //does them all at once.
 
 	//End SHADERS & PIPELINE
 
@@ -2742,22 +2942,107 @@ void VkEndRendering()
 
 }
 
-void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer)
+void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer, u32 *Id)
 {
-	u8 *Verts = (u8*) ZMalloc(VertexCount*sizeof(Vertex), 1);	
-	u8 *Index = (u8*) ZMalloc(IndexCount*sizeof(u32), 2);	
+	u32 VSize = sizeof(Vertex) * VertexCount;
+	u32 ISize = sizeof(u32) * IndexCount;
+	u8 *Verts;
+	u8 *Index;
+
+	if(!*Id)
+	{
+		Verts = (u8*) ZMalloc(VSize, 1);	
+		Index = (u8*) ZMalloc(ISize, 2);	
+		*Id = VkGetId(VertexBuffer, VSize);
+		VkPush(IdContainer, *Id);
+		VkPush(VpContainer, Verts);
+		VkPush(IpContainer, Index);
+	}
+	else
+	{
+		s32 Verisign = VkIdExists(*Id);
+		if(Verisign == -1)
+		{
+			Warn("Unknown Entity Id supplied at draw update.");
+			return;
+		}
+		else
+		{
+			Verts = VpContainer.Items[Verisign];
+			Index = IpContainer.Items[Verisign];
+			ASSERT(Verts, "Invalid vertex pointer.");
+			ASSERT(Index, "Invalid index pointer.");
+			//signal to free resources, the hash can never generate this number.
+			if(*Id == 1) 
+			{
+				ZFree(Verts, 1);
+				ZFree(Index, 2);		
+				return;
+			}
+		}
+	}
+
 	VkDeviceSize VOffset = Verts - (u8*) VertexBuffers[0].Data;
 	VkDeviceSize IOffset = Index - (u8*) IndexBuffers[0].Data;
-	memcpy(Verts, &VertexBuffer[0], VertexCount*sizeof(Vertex));
-	memcpy(Index, &IndexBuffer[0], IndexCount*sizeof(u32));
+	memcpy(Verts, &VertexBuffer[0], VSize);
+	memcpy(Index, &IndexBuffer[0], ISize);
 	vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &VertexBuffers[0].Buffer, &VOffset);
 	vkCmdBindIndexBuffer(CommandBuffer, IndexBuffers[0].Buffer, IOffset, VK_INDEX_TYPE_UINT32);
 	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
 	vkCmdDrawIndexed(CommandBuffer, IndexCount, 1, 0, 0, 0);
+}
 
 
-	ZFree(Verts, 1); 
-	ZFree(Index, 2);
+
+void DrawTexture(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer, u32 *Id)
+{
+	u32 VSize = sizeof(Vertex) * VertexCount;
+	u32 ISize = sizeof(u32) * IndexCount;
+	u8 *Verts;
+	u8 *Index;
+
+	if(!*Id)
+	{
+		Verts = (u8*) ZMalloc(VSize, 1);	
+		Index = (u8*) ZMalloc(ISize, 2);	
+		*Id = VkGetId(VertexBuffer, VSize);
+		VkPush(IdContainer, *Id);
+		VkPush(VpContainer, Verts);
+		VkPush(IpContainer, Index);
+	}
+	else
+	{
+		s32 Verisign = VkIdExists(*Id);
+		if(Verisign == -1)
+		{
+			Warn("Unknown Entity Id supplied at draw update.");
+			return;
+		}
+		else
+		{
+			Verts = VpContainer.Items[Verisign];
+			Index = IpContainer.Items[Verisign];
+			ASSERT(Verts, "Invalid vertex pointer.");
+			ASSERT(Index, "Invalid index pointer.");
+			//signal to free resources, the hash can never generate this number.
+			if(*Id == 1) 
+			{
+				ZFree(Verts, 1);
+				ZFree(Index, 2);		
+				return;
+			}
+		}
+	}
+
+	VkDeviceSize VOffset = Verts - (u8*) VertexBuffers[0].Data;
+	VkDeviceSize IOffset = Index - (u8*) IndexBuffers[0].Data;
+	memcpy(Verts, &VertexBuffer[0], VSize);
+	memcpy(Index, &IndexBuffer[0], ISize);
+	vkCmdBindVertexBuffers(CommandBuffer, 0, 1, &VertexBuffers[0].Buffer, &VOffset);
+	vkCmdBindIndexBuffer(CommandBuffer, IndexBuffers[0].Buffer, IOffset, VK_INDEX_TYPE_UINT32);
+	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[1]);
+	vkCmdBindDescriptorSets(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelineLayouts[1], 2, 1, &FragSamplerDescriptorSet, 0, NULL);
+	vkCmdDrawIndexed(CommandBuffer, IndexCount, 1, 0, 0, 0);
 }
 
 #endif

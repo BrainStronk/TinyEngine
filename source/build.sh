@@ -37,6 +37,7 @@ function shaders()
 	assertInstalled glslangValidator
 	glslangValidator -V ./shaders/basic.vert.glsl -o ./shaders/Vbasic.spv
 	glslangValidator -V ./shaders/basic.frag.glsl -o ./shaders/Fbasic.spv
+	glslangValidator -V ./shaders/sampler2D.frag.glsl -o ./shaders/Fsampler2D.spv
 }
 
 function hexshaders()
@@ -44,6 +45,7 @@ function hexshaders()
 	assertInstalled glslangValidator
 	glslangValidator -V ./shaders/basic.vert.glsl -o ./shaders/Vbasic.h --vn Vbasic
 	glslangValidator -V ./shaders/basic.frag.glsl -o ./shaders/Fbasic.h --vn Fbasic
+	glslangValidator -V ./shaders/sampler2D.frag.glsl -o ./shaders/Fsampler2D.h --vn Fsampler2D
 }
 
 function cross()

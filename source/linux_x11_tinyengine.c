@@ -11,6 +11,7 @@
 #include <string.h>
 #include <dlfcn.h>
 #include <time.h>
+#include <math.h>
 #include <sys/mman.h>
 
 #include "tinyengine.h"
@@ -421,7 +422,8 @@ int main(int argc, char** argv)
 	//Maybe some day events will be threaded? 
 	//pthread_t Ithread;
 	//ASSERT(!pthread_create(&Ithread, NULL, &EventThread, NULL), "pthread: EventThread failed.");
-
+	u32 Id1 = 0;
+	u32 Id2 = 0;
 	while (1) 
 	{
 		ProcessEvents();
@@ -430,9 +432,10 @@ int main(int argc, char** argv)
 
 		//DRAW commands go in between Begin and End respectively.
 
-		Vertex vertices[4] = {0};
+		Vertex vertices[4];
 		vertices[0].pos[0] = -0.5f;   //x
 		vertices[0].pos[1] = -0.5f;   //y
+		vertices[0].pos[2] = 0.0f;    //z
 		vertices[0].color[0] = 1.0f; //r
 		vertices[0].color[1] = 0.0f; //g
 		vertices[0].color[2] = 0.0f; //b
@@ -441,6 +444,7 @@ int main(int argc, char** argv)
 
 		vertices[1].pos[0] = 0.5f;
 		vertices[1].pos[1] = -0.5f;
+		vertices[1].pos[2] = 0.0f;
 		vertices[1].color[0] = 0.0f;
 		vertices[1].color[1] = 1.0f;
 		vertices[1].color[2] = 0.0f;
@@ -449,6 +453,7 @@ int main(int argc, char** argv)
 
 		vertices[2].pos[0] = 0.5f;
 		vertices[2].pos[1] = 0.5f;
+		vertices[2].pos[2] = 0.0f;
 		vertices[2].color[0] = 0.0f;
 		vertices[2].color[1] = 0.0f;
 		vertices[2].color[2] = 1.0f;
@@ -457,6 +462,7 @@ int main(int argc, char** argv)
 
 		vertices[3].pos[0] = -0.5f;
 		vertices[3].pos[1] = 0.5f;
+		vertices[3].pos[2] = 0.0f;
 		vertices[3].color[0] = 1.0f;
 		vertices[3].color[1] = 1.0f;
 		vertices[3].color[2] = 1.0f;
@@ -464,7 +470,25 @@ int main(int argc, char** argv)
 		vertices[3].tex_coord[1] = 1.0f;
 
 		u32 indeces[6] = {0, 1, 2, 2, 3, 0};
-		DrawBasic(ArrayCount(vertices), &vertices[0], ArrayCount(indeces), &indeces[0]);
+		DrawBasic(ArrayCount(vertices), &vertices[0], ArrayCount(indeces), &indeces[0], &Id1);
+
+		vertices[0].pos[0] = -1.0f;   //x
+		vertices[0].pos[1] = -1.0f;   //y
+		vertices[0].pos[2] = 0.0f;    //z
+
+		vertices[1].pos[0] = 1.0f;
+		vertices[1].pos[1] = -1.0f;
+		vertices[1].pos[2] = 0.0f;
+
+		vertices[2].pos[0] = 1.0f;
+		vertices[2].pos[1] = 1.0f;
+		vertices[2].pos[2] = 0.0f;
+
+		vertices[3].pos[0] = -1.0f;
+		vertices[3].pos[1] = 1.0f;
+		vertices[3].pos[2] = 0.0f;
+
+		DrawTexture(ArrayCount(vertices), &vertices[0], ArrayCount(indeces), &indeces[0], &Id2);
 		VkEndRendering();
 	}
 
