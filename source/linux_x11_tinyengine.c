@@ -13,6 +13,7 @@
 #include <time.h>
 #include <math.h>
 #include <sys/mman.h>
+#include "sys/time.h"
 
 #include "tinyengine.h"
 
@@ -222,6 +223,7 @@ typedef struct linux_wnd
 } linux_wnd;
 
 static linux_wnd Wnd;
+uint64_t TimerOffset;
 
 void SurfaceCallback(VkSurfaceKHR* Surface)
 {
@@ -265,6 +267,18 @@ void Tiny_Free(void *Ptr)
 {
 	u64 Size = *(u64*)((u8*)Ptr - sizeof(u64));
 	munmap(Ptr, Size);
+}
+
+u64 Tiny_GetTimerValue()
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	return (u64) tv.tv_sec * (u64) 1000000 + (u64) tv.tv_usec;
+}
+
+f64 Tiny_GetTime()
+{
+	return (f64)(Tiny_GetTimerValue()-TimerOffset) / 1000000;
 }
 
 void ProcessEvents()
@@ -422,6 +436,9 @@ int main(int argc, char** argv)
 	//Maybe some day events will be threaded? 
 	//pthread_t Ithread;
 	//ASSERT(!pthread_create(&Ithread, NULL, &EventThread, NULL), "pthread: EventThread failed.");
+
+	TimerOffset = Tiny_GetTimerValue();
+
 	u32 Id1 = 0;
 	u32 Id2 = 0;
 	while (1) 

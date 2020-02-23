@@ -685,7 +685,14 @@ u32 VkGetId(const void *Data, u32 Size)
 {
 	u32 Idx = IdContainer.Idx;
 	u32 Res = (Idx > 0) ? IdContainer.Items[Idx - 1] : HASH_INITIAL;
+recalc:;
 	VkHash(&Res, Data, Size);
+	if(Res == 0 || Res == 1)
+	{
+		//Just in case.
+		Res = Tiny_GetTimerValue();
+		goto recalc;
+	}
 	return Res;
 }
 
@@ -2991,8 +2998,6 @@ void DrawBasic(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *Index
 	vkCmdBindPipeline(CommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, VkPipelines[0]);
 	vkCmdDrawIndexed(CommandBuffer, IndexCount, 1, 0, 0, 0);
 }
-
-
 
 void DrawTexture(u32 VertexCount, Vertex *VertexBuffer, u32 IndexCount, u32 *IndexBuffer, u32 *Id)
 {

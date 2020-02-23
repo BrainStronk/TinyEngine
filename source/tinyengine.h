@@ -18,7 +18,7 @@ typedef int64_t s64;
 typedef int32_t b32;
 
 typedef float f32;
-typedef float f64;
+typedef double f64;
 
 #if !__cplusplus
 #define false 0
@@ -318,6 +318,8 @@ tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here
 u8 *Tiny_ReadFile(const char *Filename, s32 *Size);
 void* Tiny_Malloc(u64 Size);
 void Tiny_Free(void *Ptr);
+u64 Tiny_GetTimerValue();
+f64 Tiny_GetTime();
 
 
 #endif // TINYENGINE_H
