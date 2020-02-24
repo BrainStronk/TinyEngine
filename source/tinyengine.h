@@ -257,7 +257,7 @@ typedef struct tiny_event_keyboard
     b32 IsDown;
 } tiny_event_keyboard;
 
-// TODO(hayden): Preface with TINY_EVENT or not?
+// TODO(hayden): Preface enum with TINY_EVENT or not?
 typedef enum tiny_event_mouse_event_type
 {
     TINY_EVENT_MOUSE_MOVE = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
@@ -306,6 +306,31 @@ typedef struct tiny_platform
     tiny_event EventQueue[512];
     int EventQueueIndex;
 } tiny_platform;
+
+typedef struct tiny_action
+{
+    u8 *String;
+
+    b32 Up;
+    b32 Down;
+    b32 Pressed;
+    b32 Released;
+
+    s32 KeyBinding;
+    s32 MouseBinding;
+    s32 JoystickBinding;
+    s32 GamepadBinding;
+    s32 ControllerBinding; // XInput
+} tiny_action;
+
+// TODO(hayden): Example usage code -- Remove later!!!
+//{
+    typedef enum example_actions
+    {
+        MOVE_LEFT,
+        MOVE_RIGHT,
+    } example_actions;
+//}
 
 tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
 

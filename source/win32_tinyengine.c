@@ -42,6 +42,7 @@ Win32PrintDebugString(char* Format, ...)
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
 }
+
 #include "tinyengine.c"
 
 typedef struct win32_audio_thread_params
