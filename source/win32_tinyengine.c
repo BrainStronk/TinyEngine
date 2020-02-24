@@ -16,7 +16,8 @@
 #endif
 #include "stb_sprintf.h"
 
-#include "tinyengine.h"
+#include "tinyengine_types.h"
+#include "tinyengine_platform.h"
 
 static b32 IsRunning;
 static ID3D11Device *Device;
