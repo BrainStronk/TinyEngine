@@ -1232,7 +1232,7 @@ u8 *StagingDigress(VkDeviceSize Size, u8 BufIndex, VkDeviceSize *Offset)
 {
 	Size = (Size + (sizeof(u32)-1)) & -sizeof(u32);
 	*Offset = StagingBuffers[BufIndex].Offset;
-	ASSERT(*Offset + Size < StagingBuffers[BufIndex].Size, "UboDigress: out of memory");
+	ASSERT(*Offset + Size < StagingBuffers[BufIndex].Size, "StagingDigress: out of memory");
 	u8 *Data = (u8*)StagingBuffers[BufIndex].Data + *Offset;
 	StagingBuffers[BufIndex].Offset += Size;
 	return Data;
