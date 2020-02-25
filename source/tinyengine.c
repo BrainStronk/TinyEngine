@@ -48,22 +48,8 @@ b32 MouseButtonState[MOUSE_COUNT];
 tiny_digital_button Mouse[MOUSE_COUNT];
 
 tiny_action Actions[10]; // TODO(hayden): Example usage code -- Remove later!!!
-
-static void
-TinyInput_UpdateActions(tiny_action *Actions, int ActionsArraySize)
-{
-    for(int ActionIndex = 0; ActionIndex < ActionsArraySize; ++ActionIndex)
-    {
-        // TODO(hayden): Add other input methods once they are supported!
-
-        tiny_action *Action = &Actions[ActionIndex];
-        Action->Pressed = Keyboard[Action->KeyBinding].Pressed | Mouse[Action->MouseBinding].Pressed;
-        Action->Released = Keyboard[Action->KeyBinding].Released | Mouse[Action->MouseBinding].Released;
-
-        Action->Down = (Keyboard[Action->KeyBinding].Down | Mouse[Action->MouseBinding].Down) ? ++Action->Down : 0;
-        Action->Up = (Keyboard[Action->KeyBinding].Up | Mouse[Action->MouseBinding].Up) ? ++Action->Up : 0;
-    }
-}
+#define TINY_ACTIONS // TODO(hayden): Example usage code -- Remove later!!!
+#include "tinyengine_actions.h" // TODO(hayden): Example usage code -- Remove later!!!
 
 static void
 Tiny_Update(tiny_platform *Platform)
@@ -112,7 +98,7 @@ Tiny_Update(tiny_platform *Platform)
             Actions[MOVE_LEFT].MouseBinding = MOUSE_LEFT;
 
             // Update user defined actions
-            TinyInput_UpdateActions(Actions, ArrayCount(Actions));
+            TinyActions_Update(Actions, ArrayCount(Actions));
     //  }
     }
 }

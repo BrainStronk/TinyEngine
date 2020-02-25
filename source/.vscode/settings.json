@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "tinyengine_platform.h": "c"
+        "tinyengine_platform.h": "c",
+        "tinyengine_actions.h": "c"
     }
 }
