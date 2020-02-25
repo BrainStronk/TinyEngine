@@ -48,8 +48,14 @@ b32 MouseButtonState[MOUSE_COUNT];
 tiny_digital_button Mouse[MOUSE_COUNT];
 
 tiny_action Actions[10]; // TODO(hayden): Example usage code -- Remove later!!!
-#define TINY_ACTIONS // TODO(hayden): Example usage code -- Remove later!!!
-#include "tinyengine_actions.h" // TODO(hayden): Example usage code -- Remove later!!!
+
+// M O D U L E S ///////////////////////////////////////////////////
+
+#define TINY_ACTIONS
+#include "tinyengine_actions.h"
+#include "tinyengine_actions.c"
+
+////////////////////////////////////////////////////////////////////
 
 static void
 Tiny_Update(tiny_platform *Platform)
