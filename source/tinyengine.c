@@ -1,3 +1,10 @@
+// M O D U L E S . H ///////////////////////////////////////////////////
+
+#define TINY_ACTIONS
+#include "tinyengine_actions.h"
+
+////////////////////////////////////////////////////////////////////////
+
 static void
 Tiny_PushInputEvent(tiny_event Event)
 {
@@ -10,8 +17,8 @@ static void
 Tiny_ProcessDigitalButton(tiny_digital_button *Button, b32 WasDown)
 {
     // TODO(hayden): Avoid wrapping Up/Down?
-    Button->Down = WasDown ? ++Button->Down : false; // TODO(hayden): This is also handled in TinyInput_UpdateActions() -- should it be removed here?
-    Button->Up = !WasDown ? ++Button->Up : false; // TODO(hayden): This is also handled in TinyInput_UpdateActions() -- should it be removed here?
+    Button->Down = WasDown ? ++Button->Down : 0; // TODO(hayden): This is also handled in TinyInput_UpdateActions() -- should it be removed here?
+    Button->Up = !WasDown ? ++Button->Up : 0; // TODO(hayden): This is also handled in TinyInput_UpdateActions() -- should it be removed here?
     Button->Pressed = (Button->Down == 1);
     Button->Released = (Button->Up == 1);
 }
@@ -49,13 +56,11 @@ tiny_digital_button Mouse[MOUSE_COUNT];
 
 tiny_action Actions[10]; // TODO(hayden): Example usage code -- Remove later!!!
 
-// M O D U L E S ///////////////////////////////////////////////////
+// M O D U L E S . C ///////////////////////////////////////////////////
 
-#define TINY_ACTIONS
-#include "tinyengine_actions.h"
 #include "tinyengine_actions.c"
 
-////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 
 static void
 Tiny_Update(tiny_platform *Platform)

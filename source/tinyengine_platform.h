@@ -273,31 +273,6 @@ typedef struct tiny_platform
     int EventQueueIndex;
 } tiny_platform;
 
-typedef struct tiny_action
-{
-    u8 *String;
-
-    b32 Up;
-    b32 Down;
-    b32 Pressed;
-    b32 Released;
-
-    s32 KeyBinding;
-    s32 MouseBinding;
-    s32 JoystickBinding;
-    s32 GamepadBinding;
-    s32 ControllerBinding; // XInput
-} tiny_action;
-
-// TODO(hayden): Example usage code -- Remove later!!!
-//{
-    typedef enum example_actions
-    {
-        MOVE_LEFT,
-        MOVE_RIGHT,
-    } example_actions;
-//}
-
 tiny_platform GlobalPlatform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
 
 #endif // TINYENGINE_PLATFORM_H
