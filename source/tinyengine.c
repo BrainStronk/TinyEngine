@@ -1,8 +1,8 @@
 static void
 Tiny_PushInputEvent(tiny_event Event)
 {
-    Global_Platform.EventQueue[Global_Platform.EventQueueIndex] = Event;
-    ++Global_Platform.EventQueueIndex;
+    GlobalPlatform.EventQueue[GlobalPlatform.EventQueueIndex] = Event;
+    ++GlobalPlatform.EventQueueIndex;
 }
 
 // TODO(hayden): This might be useless/redundant now? Can this be skipped to process directly in TinyInput_UpdateActions()?

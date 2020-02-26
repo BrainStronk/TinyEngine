@@ -298,6 +298,6 @@ typedef struct tiny_action
     } example_actions;
 //}
 
-tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
+tiny_platform GlobalPlatform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
 
 #endif // TINYENGINE_PLATFORM_H
