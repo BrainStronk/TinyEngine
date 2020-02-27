@@ -1,11 +1,13 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <xinput.h>
 
 #define CINTERFACE
 #define COBJMACROS
 #define D3D11_NO_HELPERS
 #include <d3d11.h>
 #include <dxgi.h>
+
 
 #include <initguid.h>
 #include <audioclient.h>
@@ -333,7 +335,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                 {
                     // Mouse Buttons & Wheel
                     Event.Type = TINY_EVENT_TYPE_MOUSE;
-                    Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
+                    Event.Mouse.InputType = TINY_EVENT_INPUT_TYPE_CLICK;
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -342,35 +344,35 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         case RI_MOUSE_LEFT_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_LEFT;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_MIDDLE_BUTTON_UP:
                         case RI_MOUSE_MIDDLE_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_MIDDLE;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_RIGHT_BUTTON_UP:
                         case RI_MOUSE_RIGHT_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_RIGHT;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_BUTTON_4_UP:
                         case RI_MOUSE_BUTTON_4_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA1;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
                         } break;
 
                         case RI_MOUSE_BUTTON_5_UP:
                         case RI_MOUSE_BUTTON_5_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA2;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
                         } break;
 
                         case RI_MOUSE_WHEEL:
@@ -559,7 +561,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         b32 IsDown = !(Flags & RI_KEY_BREAK);
 
                         Event.Type = TINY_EVENT_TYPE_KEYBOARD;
-                        Event.Keyboard.IsDown = IsDown;
+                        Event.Keyboard.KeyIsDown = IsDown;
                         Event.Keyboard.KeyType = false;
 
                         // Assign VirtualKey to Engine's te_key_type enum
@@ -1063,7 +1065,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             // Cursor
             tiny_event Event = {0};
             Event.Type = TINY_EVENT_TYPE_MOUSE;
-            Event.Mouse.Type = TINY_EVENT_MOUSE_MOVE;
+            Event.Mouse.InputType = TINY_EVENT_INPUT_TYPE_MOVE;
             Event.Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
             Event.Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
 
@@ -1087,6 +1089,53 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
     return(Result);
 }
 
+inline void
+Win32PushValidXInputControllerEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_event_controller_enum Button, int XInputButtonMask)
+{
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *Controller = &Event.Controller;
+
+    Controller->ButtonIsDown = (ControllerState.wButtons & XInputButtonMask);
+
+    if(Controller->ButtonIsDown) 
+    {
+        Controller->Button = Button;
+        if(Button >= CONTROLLER_BUTTON_UP && Button <= CONTROLLER_BUTTON_BACK)
+        {
+            // All Digital Buttons
+            Controller->InputType = TINY_EVENT_INPUT_TYPE_BUTTON;
+        }
+        else if(Button == CONTROLLER_THUMBSTICK_LEFT)
+        {
+            Controller->InputType = TINY_EVENT_INPUT_TYPE_THUMBSTICK;
+            Controller->X = ControllerState.sThumbLX;
+            Controller->Y = ControllerState.sThumbLY;
+        }
+        else if(Button == CONTROLLER_THUMBSTICK_RIGHT)
+        {
+            Controller->InputType = TINY_EVENT_INPUT_TYPE_THUMBSTICK;
+            Controller->X = ControllerState.sThumbRX;
+            Controller->Y = ControllerState.sThumbRY;
+        }
+        else if(Button == CONTROLLER_SHOULDER_LEFT)
+        {
+            Controller->InputType = TINY_EVENT_INPUT_TYPE_SHOULDER;
+            Controller->Trigger = ControllerState.bLeftTrigger;
+        }
+        else if(Button == CONTROLLER_SHOULDER_RIGHT)
+        {
+            Controller->InputType = TINY_EVENT_INPUT_TYPE_SHOULDER;
+            Controller->Trigger = ControllerState.bRightTrigger;
+        }
+
+        // TODO(hayden): Should this happen here, or should it happen outside of this function for clarity?
+        // Only push events with actual button presses
+        Tiny_PushInputEvent(Event);
+    }
+}
+
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
 {
@@ -1103,7 +1152,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
         HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);  // NOTE(zak): At somepoint the window name should reflect the applications name
         if(Window != INVALID_HANDLE_VALUE)
         {
-            // Input
+            // RawInput
             RAWINPUTDEVICE RawInputDevices[4]; // TODO(hayden): Joystick
             { 
                 // Mouse
@@ -1175,6 +1224,35 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             
                             Tiny_Update(&GlobalPlatform);
                             Tiny_Render();
+
+                            // XInput
+                            for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
+                            {
+                                XINPUT_STATE ControllerState = {0};
+                                if(XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+                                {
+                                    // Connected
+                                    XINPUT_GAMEPAD Gamepad = ControllerState.Gamepad;
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_UP,        XINPUT_GAMEPAD_DPAD_UP);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_DOWN,      XINPUT_GAMEPAD_DPAD_DOWN);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_LEFT,      XINPUT_GAMEPAD_DPAD_LEFT);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_RIGHT,     XINPUT_GAMEPAD_DPAD_RIGHT);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_A,         XINPUT_GAMEPAD_A);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_B,         XINPUT_GAMEPAD_B);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_X,         XINPUT_GAMEPAD_X);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_Y,         XINPUT_GAMEPAD_Y);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_START,     XINPUT_GAMEPAD_START);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BACK,      XINPUT_GAMEPAD_BACK);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_SHOULDER_LEFT,    XINPUT_GAMEPAD_LEFT_SHOULDER);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_SHOULDER_RIGHT,   XINPUT_GAMEPAD_RIGHT_SHOULDER);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_LEFT,  XINPUT_GAMEPAD_LEFT_THUMB);
+                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_RIGHT, XINPUT_GAMEPAD_RIGHT_THUMB);
+                                }
+                                else
+                                {
+                                    // Not connected
+                                }
+                            }
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }

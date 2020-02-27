@@ -1,13 +1,27 @@
 #ifndef TINYENGINE_PLATFORM_H
 #define TINYENGINE_PLATFORM_H
 
+// E V E N T /////////////////////////////////////////////////////////////////////
+
 typedef enum tiny_event_type
 {
     TINY_EVENT_TYPE_KEYBOARD = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     TINY_EVENT_TYPE_MOUSE,  
+    TINY_EVENT_TYPE_CONTROLLER,
 } tiny_event_type;
 
-typedef enum tiny_event_mouse_button
+typedef enum tiny_event_input_type
+{
+    TINY_EVENT_INPUT_TYPE_BUTTON = 1,
+    TINY_EVENT_INPUT_TYPE_MOVE,
+    TINY_EVENT_INPUT_TYPE_CLICK,
+    TINY_EVENT_INPUT_TYPE_THUMBSTICK,
+    TINY_EVENT_INPUT_TYPE_SHOULDER,
+} tiny_event_input_type;
+
+// M O U S E /////////////////////////////////////////////////////////////////////
+
+typedef enum tiny_event_mouse_enum
 {
     MOUSE_LEFT = 1,
     MOUSE_MIDDLE,
@@ -16,10 +30,56 @@ typedef enum tiny_event_mouse_button
     MOUSE_EXTRA2,
 
     MOUSE_COUNT,
-} tiny_event_mouse_button;
+} tiny_event_mouse_enum;
+
+typedef struct tiny_event_mouse
+{
+    tiny_event_input_type InputType;
+    u32 X, Y;
+    s16 WheelDelta;
+    f32 NormalizedX, NormalizedY;
+    tiny_event_mouse_enum Button;
+    b32 ButtonIsDown;
+} tiny_event_mouse;
+
+// C O N T R O L L E R ///////////////////////////////////////////////////////////
+
+typedef enum tiny_event_controller_enum
+{
+    CONTROLLER_BUTTON_UP = 1,
+    CONTROLLER_BUTTON_DOWN,
+    CONTROLLER_BUTTON_LEFT,
+    CONTROLLER_BUTTON_RIGHT,
+    CONTROLLER_BUTTON_A,
+    CONTROLLER_BUTTON_B,
+    CONTROLLER_BUTTON_X,
+    CONTROLLER_BUTTON_Y,
+    CONTROLLER_BUTTON_START,
+    CONTROLLER_BUTTON_BACK,
+
+    CONTROLLER_THUMBSTICK_LEFT,
+    CONTROLLER_THUMBSTICK_RIGHT,
+
+    CONTROLLER_SHOULDER_LEFT,
+    CONTROLLER_SHOULDER_RIGHT,
+
+    CONTROLLER_COUNT,
+} tiny_event_controller_enum;
+
+typedef struct tiny_event_controller
+{
+    tiny_event_input_type InputType;
+    tiny_event_controller_enum Button;
+    b32 ButtonIsDown;
+    s32 X, Y;
+    u8 Trigger;
+    u8 ControllerNumber;
+} tiny_event_controller;
+
+// K E Y B O A R D ///////////////////////////////////////////////////////////////
 
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
-typedef enum tiny_event_key_type
+typedef enum tiny_event_keyboard_enum
 {
     KEY_A = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     KEY_B,
@@ -215,40 +275,15 @@ typedef enum tiny_event_key_type
     KEY_PA1,
 
     KEY_COUNT,
-} tiny_event_key_type;
+} tiny_event_keyboard_enum;
 
 typedef struct tiny_event_keyboard
 {
-    tiny_event_key_type KeyType;
-    b32 IsDown;
+    tiny_event_keyboard_enum KeyType;
+    b32 KeyIsDown;
 } tiny_event_keyboard;
 
-// TODO(hayden): Preface enum with TINY_EVENT or not?
-typedef enum tiny_event_mouse_event_type
-{
-    TINY_EVENT_MOUSE_MOVE = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
-    TINY_EVENT_MOUSE_CLICK,
-} tiny_event_mouse_event_type;
-
-typedef struct tiny_event_mouse
-{
-    tiny_event_mouse_event_type Type;
-    u32 X, Y;
-    s16 WheelDelta;
-    f32 NormalizedX, NormalizedY;
-    tiny_event_mouse_button Button;
-    b32 IsDown;
-} tiny_event_mouse;
-
-typedef struct tiny_event
-{
-    tiny_event_type Type;
-    union
-    {
-        struct { tiny_event_keyboard Keyboard; };
-        struct { tiny_event_mouse Mouse; };
-    };
-} tiny_event;
+// T I N Y _ E V E N T ///////////////////////////////////////////////////////////
 
 typedef struct tiny_digital_button
 {
@@ -257,6 +292,19 @@ typedef struct tiny_digital_button
     b32 Up;
     b32 Down;
 } tiny_digital_button;
+
+typedef struct tiny_event
+{
+    tiny_event_type Type;
+    union
+    {
+        struct { tiny_event_keyboard Keyboard; };
+        struct { tiny_event_mouse Mouse; };
+        struct { tiny_event_controller Controller; };
+    };
+} tiny_event;
+
+// P L A T F O R M ///////////////////////////////////////////////////////////////
 
 typedef struct tiny_platform_audio
 {

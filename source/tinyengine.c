@@ -1,9 +1,9 @@
-// M O D U L E S . H ///////////////////////////////////////////////////
+// M O D U L E S . H /////////////////////////////////////////////////////////////
 
 #define TINY_ACTIONS
 #include "tinyengine_actions.h"
 
-////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 
 static void
 Tiny_PushInputEvent(tiny_event Event)
@@ -53,14 +53,16 @@ b32 KeyboardButtonState[KEY_COUNT];
 tiny_digital_button Keyboard[KEY_COUNT];
 b32 MouseButtonState[MOUSE_COUNT];
 tiny_digital_button Mouse[MOUSE_COUNT];
+b32 ControllerButtonState[CONTROLLER_COUNT];
+tiny_digital_button Controller[CONTROLLER_COUNT];
 
 tiny_action Actions[10]; // TODO(hayden): Example usage code -- Remove later!!!
 
-// M O D U L E S . C ///////////////////////////////////////////////////
+// M O D U L E S . C /////////////////////////////////////////////////////////////
 
 #include "tinyengine_actions.c"
 
-////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 
 static void
 Tiny_Update(tiny_platform *Platform)
@@ -74,13 +76,20 @@ Tiny_Update(tiny_platform *Platform)
         {
             if(Event.Type == TINY_EVENT_TYPE_KEYBOARD)
             {
-                KeyboardButtonState[Event.Keyboard.KeyType] = Event.Keyboard.IsDown;
+                KeyboardButtonState[Event.Keyboard.KeyType] = Event.Keyboard.KeyIsDown;
             }
             else if(Event.Type == TINY_EVENT_TYPE_MOUSE)
             {
-                if(Event.Mouse.Type == TINY_EVENT_MOUSE_CLICK)
+                if(Event.Mouse.InputType == TINY_EVENT_INPUT_TYPE_CLICK)
                 {
-                    MouseButtonState[Event.Mouse.Button] = Event.Mouse.IsDown;
+                    MouseButtonState[Event.Mouse.Button] = Event.Mouse.ButtonIsDown;
+                }
+            }
+            else if(Event.Type == TINY_EVENT_TYPE_CONTROLLER)
+            {
+                if(Event.Controller.InputType == TINY_EVENT_INPUT_TYPE_BUTTON)
+                {
+                    ControllerButtonState[Event.Controller.Button] = Event.Controller.ButtonIsDown;
                 }
             }
             else
