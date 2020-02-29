@@ -1,5 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
 #include <xinput.h>
 
 #define CINTERFACE
@@ -1066,16 +1067,17 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             tiny_event Event = {0};
             Event.Type = TINY_EVENT_TYPE_MOUSE;
             Event.Mouse.InputType = TINY_EVENT_INPUT_TYPE_MOVE;
-            Event.Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
-            Event.Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
+
+            Event.Mouse.X = GET_X_LPARAM(LParam);
+            Event.Mouse.Y = GET_Y_LPARAM(LParam);
 
             // Normalized
             // TODO(hayden): Pull this out into the engine code!
             // TODO(hayden): Also, this isn't "centered" (where it's (0,0) at the center of the screen)
-            RECT ClientRect;
-            GetClientRect(Window, &ClientRect);
-            Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
-            Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
+            //RECT ClientRect;
+            //GetClientRect(Window, &ClientRect);
+            //Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
+            //Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
 
             Tiny_PushInputEvent(Event);
         } break;
@@ -1132,7 +1134,7 @@ Win32PushValidXInputControllerEvents(int ControllerNumber, XINPUT_GAMEPAD Contro
 
         // TODO(hayden): Should this happen here, or should it happen outside of this function for clarity?
         // Only push events with actual button presses
-        Tiny_PushInputEvent(Event);
+        //Tiny_PushInputEvent(Event); // TODO(hayden): Re-enable
     }
 }
 
@@ -1209,6 +1211,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         IsRunning = true;
                         while(IsRunning)
                         {
+                            GlobalPlatform.EventQueueSize = 0;
+
                             MSG Message;
                             while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
                             {

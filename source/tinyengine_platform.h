@@ -318,7 +318,8 @@ typedef struct tiny_platform_audio
 typedef struct tiny_platform
 {
     tiny_event EventQueue[512];
-    int EventQueueIndex;
+    int EventQueueSize;
+    b32 Quit;
 } tiny_platform;
 
 tiny_platform GlobalPlatform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
