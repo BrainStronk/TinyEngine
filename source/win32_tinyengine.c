@@ -9,7 +9,6 @@
 #include <d3d11.h>
 #include <dxgi.h>
 
-
 #include <initguid.h>
 #include <audioclient.h>
 #include <mmdeviceapi.h>
@@ -18,6 +17,8 @@
 #define STB_SPRINTF_IMPLEMENTATION
 #endif
 #include "stb_sprintf.h"
+
+#include <math.h>
 
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
@@ -120,13 +121,13 @@ Win32InitWASAPI()
     IMMDeviceEnumerator *DeviceEnumerator = 0;
     if(CoCreateInstance(&CLSID_MMDeviceEnumerator, 0, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void **)&DeviceEnumerator) == 0)
     {
-        IMMDevice *Device = 0;
-        if(DeviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(DeviceEnumerator, eRender, eConsole, &Device) == 0)
+        IMMDevice *IMMDevice = 0;
+        if(DeviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(DeviceEnumerator, eRender, eConsole, &IMMDevice) == 0)
         {
             DeviceEnumerator->lpVtbl->Release(DeviceEnumerator);
 
             IAudioClient *AudioClient = 0;
-            if(Device->lpVtbl->Activate(Device, &IID_IAudioClient, CLSCTX_ALL, 0, (void **)&AudioClient) == 0)
+            if(IMMDevice->lpVtbl->Activate(IMMDevice, &IID_IAudioClient, CLSCTX_ALL, 0, (void **)&AudioClient) == 0)
             {
                 WAVEFORMATEX WaveFormat = {0};
                 WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
@@ -257,8 +258,8 @@ Win32InitD3D11(HWND Window)
                                 if(GetWindowRect(Window, &WindowRect))
                                 {
                                     D3D11_VIEWPORT Viewport = {0};
-                                    Viewport.Width = WindowRect.right - WindowRect.bottom;
-                                    Viewport.Height = WindowRect.bottom - WindowRect.top;
+                                    Viewport.Width = (FLOAT)(WindowRect.right - WindowRect.bottom);
+                                    Viewport.Height = (FLOAT)(WindowRect.bottom - WindowRect.top);
                                     Viewport.MaxDepth = 1.0f;
 
                                     DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
@@ -336,7 +337,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                 {
                     // Mouse Buttons & Wheel
                     Event.Type = TINY_EVENT_TYPE_MOUSE;
-                    Event.Mouse.InputType = TINY_EVENT_INPUT_TYPE_CLICK;
+                    Event.Mouse.InputType = TINY_INPUT_TYPE_BUTTON; // NOTE(hayden): This isn't the case for wheel events
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -352,32 +353,33 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         case RI_MOUSE_MIDDLE_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_MIDDLE;
-                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN) >> 4;
                         } break;
 
                         case RI_MOUSE_RIGHT_BUTTON_UP:
                         case RI_MOUSE_RIGHT_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_RIGHT;
-                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN) >> 2;
                         } break;
 
                         case RI_MOUSE_BUTTON_4_UP:
                         case RI_MOUSE_BUTTON_4_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA1;
-                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN) >> 6;
                         } break;
 
                         case RI_MOUSE_BUTTON_5_UP:
                         case RI_MOUSE_BUTTON_5_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA2;
-                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN) >> 8;
                         } break;
 
                         case RI_MOUSE_WHEEL:
                         {
+                            Event.Mouse.InputType = TINY_INPUT_TYPE_SCROLL_WHEEL;
                             Event.Mouse.WheelDelta = RawInput->data.mouse.usButtonData;
                         } break;
 
@@ -388,7 +390,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                     }
 
                     // TODO(hayden): Assert this?
-                    if(Event.Mouse.Button != false) // Don't push events we aren't choosing to handle
+                    if(Event.Mouse.Button || Event.Mouse.WheelDelta) // Don't push events we aren't choosing to handle
                     {
                         Tiny_PushInputEvent(Event);
                     }
@@ -568,7 +570,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         // Assign VirtualKey to Engine's te_key_type enum
                         if((VirtualKey >= 'A') && (VirtualKey <= 'Z'))
                         {
-                            for(int VKIndex = 'A'; VKIndex <= 'Z'; ++VKIndex)
+                            for(u32 VKIndex = 'A'; VKIndex <= 'Z'; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
@@ -579,7 +581,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         }
                         else if((VirtualKey >= '0') && (VirtualKey <= '9'))
                         {
-                            for(int VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
+                            for(u32 VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
                             {
                                 int Offset = KEY_0;
                                 if(VKIndex == VirtualKey)
@@ -592,7 +594,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         else if((VirtualKey >= VK_NUMPAD0) && (VirtualKey <= VK_DIVIDE))
                         {
                             int Offset = KEY_NUMPAD_0;
-                            for(int VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
+                            for(u32 VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
@@ -604,7 +606,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         else if((VirtualKey >= VK_F1) && (VirtualKey <= VK_F24))
                         {
                             int Offset = KEY_F1;
-                            for(int VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
+                            for(u32 VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
@@ -616,7 +618,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         else if((VirtualKey >= VK_LEFT) && (VirtualKey <= VK_DOWN))
                         {
                             int Offset = KEY_LEFT;
-                            for(int VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
+                            for(u32 VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
@@ -1066,7 +1068,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             // Cursor
             tiny_event Event = {0};
             Event.Type = TINY_EVENT_TYPE_MOUSE;
-            Event.Mouse.InputType = TINY_EVENT_INPUT_TYPE_MOVE;
+            Event.Mouse.InputType = TINY_INPUT_TYPE_MOVE;
 
             Event.Mouse.X = GET_X_LPARAM(LParam);
             Event.Mouse.Y = GET_Y_LPARAM(LParam);
@@ -1092,49 +1094,180 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 }
 
 inline void
-Win32PushValidXInputControllerEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_event_controller_enum Button, int XInputButtonMask)
+Win32PushValidXInputButtonEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum Button, int XInputButtonMask)
 {
     tiny_event Event = {0};
     Event.Type = TINY_EVENT_TYPE_CONTROLLER;
 
-    tiny_event_controller *Controller = &Event.Controller;
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
 
-    Controller->ButtonIsDown = (ControllerState.wButtons & XInputButtonMask);
+    TinyController->ButtonIsDown = (ControllerState.wButtons & XInputButtonMask) ? true : false; // Get rid of flag so it's just 1 or 0
 
-    if(Controller->ButtonIsDown) 
+    if(TinyController->ButtonIsDown) 
     {
-        Controller->Button = Button;
+        TinyController->Button = Button;
         if(Button >= CONTROLLER_BUTTON_UP && Button <= CONTROLLER_BUTTON_BACK)
         {
             // All Digital Buttons
-            Controller->InputType = TINY_EVENT_INPUT_TYPE_BUTTON;
+            TinyController->InputType = TINY_INPUT_TYPE_BUTTON;
         }
+#if 0
         else if(Button == CONTROLLER_THUMBSTICK_LEFT)
         {
-            Controller->InputType = TINY_EVENT_INPUT_TYPE_THUMBSTICK;
+            Controller->InputType = TINY_INPUT_TYPE_THUMBSTICK;
             Controller->X = ControllerState.sThumbLX;
             Controller->Y = ControllerState.sThumbLY;
         }
         else if(Button == CONTROLLER_THUMBSTICK_RIGHT)
         {
-            Controller->InputType = TINY_EVENT_INPUT_TYPE_THUMBSTICK;
+            Controller->InputType = TINY_INPUT_TYPE_THUMBSTICK;
             Controller->X = ControllerState.sThumbRX;
             Controller->Y = ControllerState.sThumbRY;
         }
         else if(Button == CONTROLLER_SHOULDER_LEFT)
         {
-            Controller->InputType = TINY_EVENT_INPUT_TYPE_SHOULDER;
+            Controller->InputType = TINY_INPUT_TYPE_SHOULDER;
             Controller->Trigger = ControllerState.bLeftTrigger;
         }
         else if(Button == CONTROLLER_SHOULDER_RIGHT)
         {
-            Controller->InputType = TINY_EVENT_INPUT_TYPE_SHOULDER;
+            Controller->InputType = TINY_INPUT_TYPE_SHOULDER;
             Controller->Trigger = ControllerState.bRightTrigger;
         }
+#endif
 
         // TODO(hayden): Should this happen here, or should it happen outside of this function for clarity?
-        // Only push events with actual button presses
-        //Tiny_PushInputEvent(Event); // TODO(hayden): Re-enable
+        Tiny_PushInputEvent(Event);
+    }
+}
+
+inline void
+Win32PushValidXInputTriggerEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum EnumType)
+{
+    static u8 LastLeft;
+    static u8 LastRight;
+
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
+    TinyController->InputType = TINY_INPUT_TYPE_TRIGGER;
+    TinyController->Button = EnumType;
+
+    if(EnumType == CONTROLLER_TRIGGER_LEFT)
+    {
+        if(ControllerState.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+        {
+            TinyController->Trigger = ControllerState.bLeftTrigger; 
+        }
+        else 
+        {
+            TinyController->Trigger = 0;
+        }
+    }
+    else if(EnumType == CONTROLLER_TRIGGER_RIGHT)
+    {
+        if(ControllerState.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+        {
+            TinyController->Trigger = ControllerState.bRightTrigger; 
+        }
+        else 
+        {
+            TinyController->Trigger = 0;
+        }
+    }
+
+    if(EnumType == CONTROLLER_TRIGGER_LEFT && (ControllerState.bLeftTrigger != LastLeft))
+    {
+        LastLeft = ControllerState.bLeftTrigger;
+        Tiny_PushInputEvent(Event);
+    }
+    else if(EnumType == CONTROLLER_TRIGGER_RIGHT && (ControllerState.bRightTrigger != LastRight))
+    {
+        LastRight = ControllerState.bRightTrigger;
+        Tiny_PushInputEvent(Event);
+    }
+}
+
+inline void
+Win32FillXInputControllerThumbstickValues(tiny_event_controller *TinyController, SHORT XInputThumbX, SHORT XInputThumbY, int Deadzone)
+{
+    TinyController->ActualX = XInputThumbX;
+    TinyController->ActualY = XInputThumbY;
+
+    if(TinyController->ActualX < -32767) { TinyController->ActualX = -32767; }
+    if(TinyController->ActualY < -32767) { TinyController->ActualY = -32767; }
+
+    TinyController->Magnitude = (u32)sqrt(TinyController->ActualX*TinyController->ActualX + TinyController->ActualY*TinyController->ActualY);
+    TinyController->NormalizedActualX = (f32)TinyController->ActualX / (f32)TinyController->Magnitude;
+    TinyController->NormalizedActualY = (f32)TinyController->ActualY / (f32)TinyController->Magnitude;
+
+    TinyController->DeadzonedX = (TinyController->ActualX > Deadzone) ? (TinyController->ActualX - Deadzone) : 0;
+    TinyController->DeadzonedX = (TinyController->ActualX < Deadzone) ? (TinyController->ActualX + Deadzone) : TinyController->DeadzonedX;
+    TinyController->DeadzonedY = (TinyController->ActualY > Deadzone) ? (TinyController->ActualY - Deadzone) : 0;
+    TinyController->DeadzonedY = (TinyController->ActualY < Deadzone) ? (TinyController->ActualY + Deadzone) : TinyController->DeadzonedY;
+    
+
+    if(TinyController->Magnitude > (u32)Deadzone)
+    {
+        if(TinyController->Magnitude > 32767) { TinyController->Magnitude = 32767; }
+
+        TinyController->Magnitude -= Deadzone;
+        TinyController->NormalizedMagnitude = (f32)TinyController->Magnitude / (32767 - Deadzone);
+
+        TinyController->NormalizedDeadzonedX = (f32)TinyController->DeadzonedX / (f32)TinyController->Magnitude;
+        TinyController->NormalizedDeadzonedY = (f32)TinyController->DeadzonedY / (f32)TinyController->Magnitude;
+    }
+    else
+    {
+        TinyController->Magnitude = 0;
+        TinyController->DeadzonedX = 0;
+        TinyController->DeadzonedY = 0;
+        TinyController->NormalizedMagnitude = 0.0f;
+        TinyController->NormalizedDeadzonedX = 0.0f;
+        TinyController->NormalizedDeadzonedY = 0.0f;
+    }
+}
+
+inline void
+Win32PushValidXInputThumbstickEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum EnumType)
+{
+    // Only push changed values
+    static int LastLeftX;
+    static int LastLeftY;
+    static int LastRightX;
+    static int LastRightY;
+
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
+    TinyController->InputType = TINY_INPUT_TYPE_THUMBSTICK;
+    TinyController->Button = EnumType;
+
+    if(EnumType == CONTROLLER_THUMBSTICK_LEFT)
+    {
+        Win32FillXInputControllerThumbstickValues(TinyController, ControllerState.sThumbLX, ControllerState.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+    }
+    else if(EnumType == CONTROLLER_THUMBSTICK_RIGHT)
+    {
+        Win32FillXInputControllerThumbstickValues(TinyController, ControllerState.sThumbRX, ControllerState.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+    }
+
+    if(EnumType == CONTROLLER_THUMBSTICK_LEFT && (TinyController->ActualX != LastLeftX || TinyController->ActualY != LastLeftY))
+    {
+        LastLeftX = TinyController->ActualX;
+        LastLeftY = TinyController->ActualY;
+        Tiny_PushInputEvent(Event);
+    }
+    else if(EnumType == CONTROLLER_THUMBSTICK_RIGHT && (TinyController->ActualX != LastRightX || TinyController->ActualX != LastRightX))
+    {
+        LastRightX = TinyController->ActualX;
+        LastRightY = TinyController->ActualY;
+        Tiny_PushInputEvent(Event);
     }
 }
 
@@ -1226,9 +1359,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
                             
-                            Tiny_Update(&GlobalPlatform);
-                            Tiny_Render();
-
                             // XInput
                             for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
                             {
@@ -1237,26 +1367,33 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 {
                                     // Connected
                                     XINPUT_GAMEPAD Gamepad = ControllerState.Gamepad;
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_UP,        XINPUT_GAMEPAD_DPAD_UP);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_DOWN,      XINPUT_GAMEPAD_DPAD_DOWN);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_LEFT,      XINPUT_GAMEPAD_DPAD_LEFT);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_RIGHT,     XINPUT_GAMEPAD_DPAD_RIGHT);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_A,         XINPUT_GAMEPAD_A);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_B,         XINPUT_GAMEPAD_B);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_X,         XINPUT_GAMEPAD_X);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_Y,         XINPUT_GAMEPAD_Y);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_START,     XINPUT_GAMEPAD_START);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BACK,      XINPUT_GAMEPAD_BACK);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_SHOULDER_LEFT,    XINPUT_GAMEPAD_LEFT_SHOULDER);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_SHOULDER_RIGHT,   XINPUT_GAMEPAD_RIGHT_SHOULDER);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_LEFT,  XINPUT_GAMEPAD_LEFT_THUMB);
-                                    Win32PushValidXInputControllerEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_RIGHT, XINPUT_GAMEPAD_RIGHT_THUMB);
-                                }
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_UP,           XINPUT_GAMEPAD_DPAD_UP);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_DOWN,         XINPUT_GAMEPAD_DPAD_DOWN);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_LEFT,         XINPUT_GAMEPAD_DPAD_LEFT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_RIGHT,        XINPUT_GAMEPAD_DPAD_RIGHT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_A,            XINPUT_GAMEPAD_A);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_B,            XINPUT_GAMEPAD_B);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_X,            XINPUT_GAMEPAD_X);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_Y,            XINPUT_GAMEPAD_Y);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_START,        XINPUT_GAMEPAD_START);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BACK,         XINPUT_GAMEPAD_BACK);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_THUMB_LEFT,   XINPUT_GAMEPAD_LEFT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_THUMB_RIGHT,  XINPUT_GAMEPAD_RIGHT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BUMPER_LEFT,  XINPUT_GAMEPAD_LEFT_SHOULDER);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BUMPER_RIGHT, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex, Gamepad, CONTROLLER_TRIGGER_LEFT);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex, Gamepad, CONTROLLER_TRIGGER_RIGHT);
+                                    Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_LEFT);
+                                    Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_RIGHT);
+                                }   
                                 else
                                 {
                                     // Not connected
                                 }
                             }
+
+                            Tiny_Update(&GlobalPlatform);
+                            Tiny_Render();
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
                         }

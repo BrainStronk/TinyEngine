@@ -13,7 +13,18 @@ tiny_action Actions[10];
 static void
 Tiny_GameUpdate(tiny_platform *Platform)
 {
-    //Win32PrintDebugString("A[0]: %d, A[1]: %d, A[2]: %d, A[3]: %d\n", Platform->EventQueue[0].Keyboard.KeyType, Platform->EventQueue[1].Keyboard.KeyType, Platform->EventQueue[2].Keyboard.KeyType, Platform->EventQueue[3].Keyboard.KeyType);
+    #if 0
+    // TODO(hayden): Example usage code -- Remove later!!!
+//  {
+        // Update based on user input
+        Actions[MOVE_LEFT].String = "Move Left";
+        Actions[MOVE_LEFT].KeyBinding = KEY_A;
+        Actions[MOVE_LEFT].MouseBinding = MOUSE_LEFT;
+
+        // Update user defined actions
+        TinyActions_Update(Actions, ArrayCount(Actions));
+//  }
+#endif
 }
 
 static void

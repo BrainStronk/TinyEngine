@@ -11,6 +11,9 @@ IF NOT EXIST ..\build mkdir ..\build
 
 pushd ..\build
 
-cl -nologo -FC -Zi -DTINY_ENGINE_DEBUG ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib xinput.lib
+set CompilerFlags=-nologo -EHa- -FC -fp:fast -Gm- -GR- -MTd -Od -Oi -W4 -WX -Z7
+set OffErrors=-wd4201 -wd4100 -wd4189 -wd4505
+
+cl %CompilerFlags% %OffErrors% -DTINY_ENGINE_DEBUG ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib xinput.lib
 
 popd
