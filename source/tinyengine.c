@@ -50,9 +50,9 @@ tiny_digital_button MouseButtons[MOUSE_COUNT];
 tiny_digital_button ControllerButtons[CONTROLLER_COUNT];
 
 // Flattened state
-tiny_digital_button Keyboard[KEY_COUNT];
-tiny_controller Controller;
-tiny_mouse Mouse;
+tiny_keyboard TinyInternalKeyboard;
+tiny_controller TinyInternalController;
+tiny_mouse TinyInternalMouse;
 
 #include "game.c"
 
@@ -134,20 +134,20 @@ Tiny_Update(tiny_platform *Platform)
                     {
                         StickLeftX = Event.Controller.DeadzonedX;
                         StickLeftY = Event.Controller.DeadzonedY;
-                        StickLeftXNormalized = Event.Controller.NormalizedDeadzonedX;
-                        StickLeftYNormalized = Event.Controller.NormalizedDeadzonedY;
+                        StickLeftXNormalized = Event.Controller.DeadzonedXNormalized;
+                        StickLeftYNormalized = Event.Controller.DeadzonedYNormalized;
                         MagnitudeLeft = Event.Controller.Magnitude;
-                        MagnitudeLeftNormalized = Event.Controller.NormalizedMagnitude;
+                        MagnitudeLeftNormalized = Event.Controller.MagnitudeNormalized;
                         ThereWasALeftThumbstickEvent = true;
                     }
                     else if(Event.Controller.Button == CONTROLLER_THUMBSTICK_RIGHT)
                     {
                         StickRightX = Event.Controller.DeadzonedX;
                         StickRightY = Event.Controller.DeadzonedY;
-                        StickRightXNormalized = Event.Controller.NormalizedDeadzonedX;
-                        StickRightYNormalized = Event.Controller.NormalizedDeadzonedY;
+                        StickRightXNormalized = Event.Controller.DeadzonedXNormalized;
+                        StickRightYNormalized = Event.Controller.DeadzonedYNormalized;
                         MagnitudeRight = Event.Controller.Magnitude;
-                        MagnitudeRightNormalized = Event.Controller.NormalizedMagnitude;
+                        MagnitudeRightNormalized = Event.Controller.MagnitudeNormalized;
                         ThereWasARightThumbstickEvent = true;
                     }
                 }
@@ -161,26 +161,26 @@ Tiny_Update(tiny_platform *Platform)
         // Update Keyboard based on KeyboardState
         for(int InputIndex = 0; InputIndex < KEY_COUNT; ++InputIndex)
         {
-            Tiny_ProcessDigitalButton(&Keyboard[InputIndex], KeyboardButtonState[InputIndex]);
+            Tiny_ProcessDigitalButton(&TinyInternalKeyboard.A + InputIndex, KeyboardButtonState[InputIndex]);
         }
 
         // Update Mouse
         {
             // Update Mouse based on MouseButtonState
-            Tiny_ProcessDigitalButton(&Mouse.Left,   MouseButtonState[MOUSE_LEFT]);
-            Tiny_ProcessDigitalButton(&Mouse.Middle, MouseButtonState[MOUSE_MIDDLE]);
-            Tiny_ProcessDigitalButton(&Mouse.Right,  MouseButtonState[MOUSE_RIGHT]);
-            Tiny_ProcessDigitalButton(&Mouse.Extra1, MouseButtonState[MOUSE_EXTRA1]);
-            Tiny_ProcessDigitalButton(&Mouse.Extra2, MouseButtonState[MOUSE_EXTRA2]);
+            Tiny_ProcessDigitalButton(&TinyInternalMouse.Left,   MouseButtonState[MOUSE_LEFT]);
+            Tiny_ProcessDigitalButton(&TinyInternalMouse.Middle, MouseButtonState[MOUSE_MIDDLE]);
+            Tiny_ProcessDigitalButton(&TinyInternalMouse.Right,  MouseButtonState[MOUSE_RIGHT]);
+            Tiny_ProcessDigitalButton(&TinyInternalMouse.Extra1, MouseButtonState[MOUSE_EXTRA1]);
+            Tiny_ProcessDigitalButton(&TinyInternalMouse.Extra2, MouseButtonState[MOUSE_EXTRA2]);
 
-            Mouse.WheelDelta = MouseWheelDelta;
+            TinyInternalMouse.WheelDelta = MouseWheelDelta;
 
             // TODO(hayden): What should Mouse.X and Mouse.Y be if the mouse isn't on the screen?
             // NOTE(hayden): Mouse.X and Mouse.Y persist across frames unless the location is updated
             if(ThereWasAMouseMoveEvent)
             {
-                Mouse.X = MouseX;
-                Mouse.Y = MouseY;
+                TinyInternalMouse.X = MouseX;
+                TinyInternalMouse.Y = MouseY;
             }
 
             // TODO(hayden): Normalized mouse input
@@ -188,48 +188,45 @@ Tiny_Update(tiny_platform *Platform)
 
         // Update Controller
         {
-            Tiny_ProcessDigitalButton(&Controller.Up,               ControllerButtonState[CONTROLLER_BUTTON_UP]);
-            Tiny_ProcessDigitalButton(&Controller.Down,             ControllerButtonState[CONTROLLER_BUTTON_DOWN]);
-            Tiny_ProcessDigitalButton(&Controller.Left,             ControllerButtonState[CONTROLLER_BUTTON_LEFT]);
-            Tiny_ProcessDigitalButton(&Controller.Right,            ControllerButtonState[CONTROLLER_BUTTON_RIGHT]);
-            Tiny_ProcessDigitalButton(&Controller.A,                ControllerButtonState[CONTROLLER_BUTTON_A]);
-            Tiny_ProcessDigitalButton(&Controller.B,                ControllerButtonState[CONTROLLER_BUTTON_B]);
-            Tiny_ProcessDigitalButton(&Controller.X,                ControllerButtonState[CONTROLLER_BUTTON_X]);
-            Tiny_ProcessDigitalButton(&Controller.Y,                ControllerButtonState[CONTROLLER_BUTTON_Y]);
-            Tiny_ProcessDigitalButton(&Controller.Start,            ControllerButtonState[CONTROLLER_BUTTON_START]);
-            Tiny_ProcessDigitalButton(&Controller.Back,             ControllerButtonState[CONTROLLER_BUTTON_BACK]);
-            Tiny_ProcessDigitalButton(&Controller.ThumbButtonLeft,  ControllerButtonState[CONTROLLER_BUTTON_THUMB_LEFT]);
-            Tiny_ProcessDigitalButton(&Controller.ThumbButtonRight, ControllerButtonState[CONTROLLER_BUTTON_THUMB_RIGHT]);
-            Tiny_ProcessDigitalButton(&Controller.BumperLeft,       ControllerButtonState[CONTROLLER_BUTTON_BUMPER_LEFT]);
-            Tiny_ProcessDigitalButton(&Controller.BumperRight,      ControllerButtonState[CONTROLLER_BUTTON_BUMPER_RIGHT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Up,               ControllerButtonState[CONTROLLER_BUTTON_UP]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Down,             ControllerButtonState[CONTROLLER_BUTTON_DOWN]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Left,             ControllerButtonState[CONTROLLER_BUTTON_LEFT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Right,            ControllerButtonState[CONTROLLER_BUTTON_RIGHT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.A,                ControllerButtonState[CONTROLLER_BUTTON_A]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.B,                ControllerButtonState[CONTROLLER_BUTTON_B]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.X,                ControllerButtonState[CONTROLLER_BUTTON_X]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Y,                ControllerButtonState[CONTROLLER_BUTTON_Y]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Start,            ControllerButtonState[CONTROLLER_BUTTON_START]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.Back,             ControllerButtonState[CONTROLLER_BUTTON_BACK]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.ThumbButtonLeft,  ControllerButtonState[CONTROLLER_BUTTON_THUMB_LEFT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.ThumbButtonRight, ControllerButtonState[CONTROLLER_BUTTON_THUMB_RIGHT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.BumperLeft,       ControllerButtonState[CONTROLLER_BUTTON_BUMPER_LEFT]);
+            Tiny_ProcessDigitalButton(&TinyInternalController.BumperRight,      ControllerButtonState[CONTROLLER_BUTTON_BUMPER_RIGHT]);
 
-            if(ThereWasALeftTriggerEvent) { Controller.TriggerLeft = TriggerLeft; }
-            if(ThereWasARightTriggerEvent) { Controller.TriggerRight = TriggerRight; }
+            if(ThereWasALeftTriggerEvent)  { TinyInternalController.TriggerLeft  = TriggerLeft; }
+            if(ThereWasARightTriggerEvent) { TinyInternalController.TriggerRight = TriggerRight; }
 
             if(ThereWasALeftThumbstickEvent)
             {
-                Controller.StickLeftX = StickLeftX;
-                Controller.StickLeftY = StickLeftY;
-                Controller.StickLeftXNormalized = StickLeftXNormalized;
-                Controller.StickLeftYNormalized = StickLeftYNormalized;
-                Controller.MagnitudeLeft = MagnitudeLeft;
-                Controller.MagnitudeLeftNormalized = MagnitudeLeftNormalized;
+                TinyInternalController.StickLeftX = StickLeftX;
+                TinyInternalController.StickLeftY = StickLeftY;
+                TinyInternalController.StickLeftXNormalized = StickLeftXNormalized;
+                TinyInternalController.StickLeftYNormalized = StickLeftYNormalized;
+                TinyInternalController.MagnitudeLeft = MagnitudeLeft;
+                TinyInternalController.MagnitudeLeftNormalized = MagnitudeLeftNormalized;
             }
 
             if(ThereWasARightThumbstickEvent)
             {
-                Controller.StickRightX = StickRightX;
-                Controller.StickRightY = StickRightY;
-                Controller.StickRightXNormalized = StickRightXNormalized;
-                Controller.StickRightYNormalized = StickRightYNormalized;
-                Controller.MagnitudeRight = MagnitudeRight;
-                Controller.MagnitudeRightNormalized = MagnitudeRightNormalized;
+                TinyInternalController.StickRightX = StickRightX;
+                TinyInternalController.StickRightY = StickRightY;
+                TinyInternalController.StickRightXNormalized = StickRightXNormalized;
+                TinyInternalController.StickRightYNormalized = StickRightYNormalized;
+                TinyInternalController.MagnitudeRight = MagnitudeRight;
+                TinyInternalController.MagnitudeRightNormalized = MagnitudeRightNormalized;
             }
         }
     }
-
-    //Win32PrintDebugString("LX: %d, LY: %d :: NLX: %f, NLY: %f :: M: %d, NM: %f\n", Controller.StickLeftX, Controller.StickLeftY, Controller.StickLeftXNormalized, Controller.StickLeftYNormalized, Controller.MagnitudeLeft, Controller.MagnitudeLeftNormalized);
-    Win32PrintDebugString("%d\n", Controller.TriggerLeft);
 
     // GAME *****************/
     Tiny_GameUpdate(Platform);

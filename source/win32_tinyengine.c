@@ -643,7 +643,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
                                 case VK_RETURN:
                                 {
-                                    Event.Keyboard.KeyType = KEY_RETURN;
+                                    Event.Keyboard.KeyType = KEY_ENTER;
                                 } break;
 
                                 case VK_LSHIFT:
@@ -1201,8 +1201,8 @@ Win32FillXInputControllerThumbstickValues(tiny_event_controller *TinyController,
     if(TinyController->ActualY < -32767) { TinyController->ActualY = -32767; }
 
     TinyController->Magnitude = (u32)sqrt(TinyController->ActualX*TinyController->ActualX + TinyController->ActualY*TinyController->ActualY);
-    TinyController->NormalizedActualX = (f32)TinyController->ActualX / (f32)TinyController->Magnitude;
-    TinyController->NormalizedActualY = (f32)TinyController->ActualY / (f32)TinyController->Magnitude;
+    TinyController->ActualXNormalized = (f32)TinyController->ActualX / (f32)TinyController->Magnitude;
+    TinyController->ActualYNormalized = (f32)TinyController->ActualY / (f32)TinyController->Magnitude;
 
     TinyController->DeadzonedX = (TinyController->ActualX > Deadzone) ? (TinyController->ActualX - Deadzone) : 0;
     TinyController->DeadzonedX = (TinyController->ActualX < Deadzone) ? (TinyController->ActualX + Deadzone) : TinyController->DeadzonedX;
@@ -1215,19 +1215,19 @@ Win32FillXInputControllerThumbstickValues(tiny_event_controller *TinyController,
         if(TinyController->Magnitude > 32767) { TinyController->Magnitude = 32767; }
 
         TinyController->Magnitude -= Deadzone;
-        TinyController->NormalizedMagnitude = (f32)TinyController->Magnitude / (32767 - Deadzone);
+        TinyController->MagnitudeNormalized = (f32)TinyController->Magnitude / (32767 - Deadzone);
 
-        TinyController->NormalizedDeadzonedX = (f32)TinyController->DeadzonedX / (f32)TinyController->Magnitude;
-        TinyController->NormalizedDeadzonedY = (f32)TinyController->DeadzonedY / (f32)TinyController->Magnitude;
+        TinyController->DeadzonedXNormalized = (f32)TinyController->DeadzonedX / (f32)TinyController->Magnitude;
+        TinyController->DeadzonedYNormalized = (f32)TinyController->DeadzonedY / (f32)TinyController->Magnitude;
     }
     else
     {
         TinyController->Magnitude = 0;
         TinyController->DeadzonedX = 0;
         TinyController->DeadzonedY = 0;
-        TinyController->NormalizedMagnitude = 0.0f;
-        TinyController->NormalizedDeadzonedX = 0.0f;
-        TinyController->NormalizedDeadzonedY = 0.0f;
+        TinyController->MagnitudeNormalized = 0.0f;
+        TinyController->DeadzonedXNormalized = 0.0f;
+        TinyController->DeadzonedYNormalized = 0.0f;
     }
 }
 

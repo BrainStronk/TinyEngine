@@ -8,23 +8,28 @@
 
 //////////////////////////////////////////////////////////////////////////////////
 
+typedef enum example_actions
+{
+    MOVE_LEFT,
+    MOVE_RIGHT,
+    CURSOR,
+} example_actions;
+
 tiny_action Actions[10];
 
 static void
 Tiny_GameUpdate(tiny_platform *Platform)
 {
-    #if 0
-    // TODO(hayden): Example usage code -- Remove later!!!
-//  {
-        // Update based on user input
-        Actions[MOVE_LEFT].String = "Move Left";
-        Actions[MOVE_LEFT].KeyBinding = KEY_A;
-        Actions[MOVE_LEFT].MouseBinding = MOUSE_LEFT;
+    // Update based on user input
+    Actions[MOVE_LEFT].String = (u8*)"Test";
+    //Actions[MOVE_LEFT].KeyboardBinding = ;
+    Actions[MOVE_LEFT].MouseBinding = MOUSE_LEFT;
+    //Actions[MOVE_LEFT].ControllerBinding = CONTROLLER_LEFT;
 
-        // Update user defined actions
-        TinyActions_Update(Actions, ArrayCount(Actions));
-//  }
-#endif
+    // Update user defined actions
+    TinyActions_Update(Actions, ArrayCount(Actions));
+
+    Win32PrintDebugString("Up: %d, Down: %d\n", Actions[MOVE_LEFT].Up, Actions[MOVE_LEFT].Down);
 }
 
 static void
