@@ -13,9 +13,10 @@ typedef enum example_actions
     MOVE_LEFT,
     MOVE_RIGHT,
     CURSOR,
+    EXAMPLE_ACTIONS_COUNT,
 } example_actions;
 
-tiny_action Actions[10];
+tiny_action Actions[EXAMPLE_ACTIONS_COUNT];
 
 static void
 Tiny_GameUpdate(tiny_platform *Platform)

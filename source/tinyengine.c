@@ -44,11 +44,6 @@ Tiny_GetMessage(tiny_platform *Platform, tiny_event *Event)
 
 ///
 
-// Processed button state
-// TODO(hayden): Unnecessary?
-tiny_digital_button MouseButtons[MOUSE_COUNT];
-tiny_digital_button ControllerButtons[CONTROLLER_COUNT];
-
 // Flattened state
 tiny_keyboard TinyInternalKeyboard;
 tiny_controller TinyInternalController;

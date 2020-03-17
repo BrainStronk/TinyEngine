@@ -14,11 +14,14 @@
         f32 NormalizedX, NormalizedY;
         s32 Value;
 
-        tiny_keyboard_enum KeyboardBinding;
-        tiny_mouse_enum MouseBinding;
-        tiny_controller_enum ControllerBinding; // XInput
-        // TODO(hayden): JoystickBinding
-        // TODO(hayden): GamepadBinding
+        union
+        {
+            tiny_keyboard_enum KeyboardBinding;
+            tiny_mouse_enum MouseBinding;
+            tiny_controller_enum ControllerBinding; // XInput
+            // TODO(hayden): JoystickBinding
+            // TODO(hayden): GamepadBinding
+        };
     } tiny_action;
 
     static void TinyActions_Update(tiny_action *Actions, int ActionsArraySize);

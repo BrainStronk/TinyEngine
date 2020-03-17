@@ -1358,7 +1358,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-                            
+                                                        
                             // XInput
                             for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
                             {
@@ -1367,22 +1367,22 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 {
                                     // Connected
                                     XINPUT_GAMEPAD Gamepad = ControllerState.Gamepad;
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_UP,           XINPUT_GAMEPAD_DPAD_UP);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_DOWN,         XINPUT_GAMEPAD_DPAD_DOWN);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_LEFT,         XINPUT_GAMEPAD_DPAD_LEFT);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_RIGHT,        XINPUT_GAMEPAD_DPAD_RIGHT);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_A,            XINPUT_GAMEPAD_A);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_B,            XINPUT_GAMEPAD_B);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_X,            XINPUT_GAMEPAD_X);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_Y,            XINPUT_GAMEPAD_Y);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_START,        XINPUT_GAMEPAD_START);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BACK,         XINPUT_GAMEPAD_BACK);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_THUMB_LEFT,   XINPUT_GAMEPAD_LEFT_THUMB);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_THUMB_RIGHT,  XINPUT_GAMEPAD_RIGHT_THUMB);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BUMPER_LEFT,  XINPUT_GAMEPAD_LEFT_SHOULDER);
-                                    Win32PushValidXInputButtonEvents(ControllerIndex, Gamepad, CONTROLLER_BUTTON_BUMPER_RIGHT, XINPUT_GAMEPAD_RIGHT_SHOULDER);
-                                    Win32PushValidXInputTriggerEvents(ControllerIndex, Gamepad, CONTROLLER_TRIGGER_LEFT);
-                                    Win32PushValidXInputTriggerEvents(ControllerIndex, Gamepad, CONTROLLER_TRIGGER_RIGHT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_UP,           XINPUT_GAMEPAD_DPAD_UP);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_DOWN,         XINPUT_GAMEPAD_DPAD_DOWN);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_LEFT,         XINPUT_GAMEPAD_DPAD_LEFT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_RIGHT,        XINPUT_GAMEPAD_DPAD_RIGHT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_A,            XINPUT_GAMEPAD_A);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_B,            XINPUT_GAMEPAD_B);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_X,            XINPUT_GAMEPAD_X);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_Y,            XINPUT_GAMEPAD_Y);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_START,        XINPUT_GAMEPAD_START);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BACK,         XINPUT_GAMEPAD_BACK);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_THUMB_LEFT,   XINPUT_GAMEPAD_LEFT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_THUMB_RIGHT,  XINPUT_GAMEPAD_RIGHT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BUMPER_LEFT,  XINPUT_GAMEPAD_LEFT_SHOULDER);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BUMPER_RIGHT, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex,    Gamepad, CONTROLLER_TRIGGER_LEFT);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex,    Gamepad, CONTROLLER_TRIGGER_RIGHT);
                                     Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_LEFT);
                                     Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_RIGHT);
                                 }   
