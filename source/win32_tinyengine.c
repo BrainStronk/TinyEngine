@@ -20,6 +20,8 @@
 
 #include <math.h>
 
+#include "handmademath.h"
+
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
@@ -1271,6 +1273,67 @@ Win32PushValidXInputThumbstickEvents(int ControllerNumber, XINPUT_GAMEPAD Contro
     }
 }
 
+typedef struct vertex
+{
+    hmm_vec4 Position;
+    hmm_vec4 Color;
+} vertex;
+
+typedef struct read_file_debug
+{
+    void *Contents;
+    u32 FileSize;
+} read_file_debug;
+
+read_file_debug
+Win32ReadFileDebug(char *Filename)
+{
+    read_file_debug Result = {0};
+
+    HANDLE FileHandle = CreateFileA(Filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if(FileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize;
+        if(GetFileSizeEx(FileHandle, &FileSize))
+        {
+            Assert(FileSize.QuadPart <= 0xFFFFFFFF);
+            u32 FileSize32 = (u32)FileSize.QuadPart;
+            Result.Contents = VirtualAlloc(0, FileSize32, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+            if(Result.Contents)
+            {
+                DWORD BytesRead;
+                if(ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) && (FileSize32 == BytesRead))
+                {
+                    // NOTE(casey): File read successfully
+                    Result.FileSize = FileSize32;
+                }
+                else
+                {                    
+                    // TODO(hayden): Logging
+                    VirtualFree(Result.Contents, 0, MEM_RELEASE);
+                    Result.Contents = 0;
+                }
+            }
+            else
+            {
+                // TODO(hayden): Logging
+            }
+        }
+        else
+        {
+            // TODO(hayden): Logging
+        }
+
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // TODO(hayden): Logging
+    }
+
+    return(Result);
+}
+
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
 {
@@ -1315,6 +1378,23 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[3].hwndTarget = Window;
             }
 
+            // D3D 11
+        //  {
+                // TODO(hayden): Hot path for debug shader reloading
+
+                // Input Assembler
+                D3D11_INPUT_ELEMENT_DESC ElementDesc[] = 
+                {
+                    {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                    {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                };
+                read_file_debug ShaderCode = Win32ReadFileDebug("shaders.fxc");
+                ID3D11InputLayout *InputLayout;
+                Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout);
+                
+                // Bind to device with DeviceContext->lpVtbl->VSSetShader
+        //  }
+
             if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
             {
                 if(Win32InitD3D11(Window))
@@ -1358,7 +1438,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-                                                        
+
                             // XInput
                             for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
                             {

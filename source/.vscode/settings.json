@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "tinyengine_platform.h": "c",
-        "tinyengine_actions.h": "c"
+        "tinyengine_actions.h": "c",
+        "audioclient.h": "c",
+        "math.h": "c"
     }
 }
