@@ -1378,23 +1378,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[3].hwndTarget = Window;
             }
 
-            // D3D 11
-        //  {
-                // TODO(hayden): Hot path for debug shader reloading
-
-                // Input Assembler
-                D3D11_INPUT_ELEMENT_DESC ElementDesc[] = 
-                {
-                    {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
-                    {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
-                };
-                read_file_debug ShaderCode = Win32ReadFileDebug("shaders.fxc");
-                ID3D11InputLayout *InputLayout;
-                Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout);
-                
-                // Bind to device with DeviceContext->lpVtbl->VSSetShader
-        //  }
-
             if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
             {
                 if(Win32InitD3D11(Window))
@@ -1419,6 +1402,77 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         }
                     }
 
+                    // D3D 11
+                //  {
+                        // TODO(hayden): Hot path for debug shader reloading
+
+                        // Input Assembler *********/
+                        D3D11_INPUT_ELEMENT_DESC ElementDesc[] = \
+                        {
+                            {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                            {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                        };
+                        read_file_debug ShaderCode = Win32ReadFileDebug("shaders.fxc");
+                        ID3D11InputLayout *InputLayout;
+                        Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout);
+
+                        // Vertex Buffer *********/
+                        f32 Vertices[] = \
+                        { // float4 POSITION, float4 COLOR
+                            -1.0f, -1.0f, -1.0f, 0.0f,  1.0f, 1.0f, 1.0f, 1.0f,
+                            -1.0f,  1.0f, -1.0f, 0.0f,  0.0f, 1.0f, 1.0f, 1.0f,
+                             1.0f,  1.0f, -1.0f, 0.0f,  1.0f, 0.0f, 1.0f, 1.0f,
+                             1.0f, -1.0f, -1.0f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
+                            -1.0f, -1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,
+                            -1.0f,  1.0f,  1.0f, 0.0f,  1.0f, 0.0f, 0.0f, 1.0f,
+                             1.0f,  1.0f,  1.0f, 0.0f,  0.0f, 1.0f, 0.0f, 1.0f,
+                             1.0f, -1.0f,  1.0f, 0.0f,  1.0f, 5.0f, 5.0f, 1.0f,
+                        };
+
+                        D3D11_BUFFER_DESC VertexBufferDesc = {0};
+                        VertexBufferDesc.ByteWidth = sizeof(Vertices);
+                        VertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+                        VertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+                        D3D11_SUBRESOURCE_DATA VertexData = {0};
+                        VertexData.pSysMem = Vertices;
+
+                        ID3D11Buffer *VertexBuffer = 0;
+                        Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexData, &VertexBuffer);
+
+                        UINT Stride = 4 + 4; // sizeof(POSITION + COLOR)
+                        UINT Offset = 0;
+                        DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
+
+                        // Index Buffer *********/
+                        UINT Indices[] = \
+                        {
+                            0, 1, 2,
+                            0, 2, 3,
+                            0, 3, 4,
+                            0, 4, 5,
+                            0, 5, 6,
+                            0, 6, 7,
+                            0, 7, 8,
+                            0, 8, 1,
+                        };
+
+                        D3D11_BUFFER_DESC IndexBufferDesc = {0};
+                        IndexBufferDesc.ByteWidth = sizeof(Indices);
+                        IndexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+                        IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+                        D3D11_SUBRESOURCE_DATA IndexData = {0};
+                        IndexData.pSysMem = Indices;
+
+                        ID3D11Buffer *IndexBuffer = 0;
+                        Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexData, &IndexBuffer);
+
+                        DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
+                        // Bind to device with DeviceContext->lpVtbl->VSSetShader
+                //  }
+
                     if(ShowWindow(Window, SW_SHOW) == 0)
                     {
                         IsRunning = true;
@@ -1438,6 +1492,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
+
+                            DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
 
                             // XInput
                             for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
