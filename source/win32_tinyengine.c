@@ -1438,14 +1438,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         // Vertex Buffer *********/
                         f32 Vertices[] = \
                         { // float4 POSITION, float4 COLOR
-                            -1.0f, -1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 1.0f, 1.0f,
-                            -1.0f,  1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 1.0f, 1.0f,
-                             1.0f,  1.0f, -1.0f, 0.0f,   1.0f, 0.0f, 1.0f, 1.0f,
-                             1.0f, -1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 0.0f, 1.0f,
-                            -1.0f, -1.0f,  1.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f,
-                            -1.0f,  1.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
-                             1.0f,  1.0f,  1.0f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f,
-                             1.0f, -1.0f,  1.0f, 0.0f,   1.0f, 0.5f, 0.5f, 1.0f,
+                            -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+                            -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+                            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+                            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
                         };
 
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
@@ -1470,12 +1466,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         {
                             0, 1, 2,
                             0, 2, 3,
-                            0, 3, 4,
-                            0, 4, 5,
-                            0, 5, 6,
-                            0, 6, 7,
-                            0, 7, 8,
-                            0, 8, 1,
                         };
 
                         D3D11_BUFFER_DESC IndexBufferDesc = {0};
@@ -1557,7 +1547,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                             DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
-                            
+
                             Tiny_Render();
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off

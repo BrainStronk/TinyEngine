@@ -1,6 +1,6 @@
 struct vs_out
 {
-    float4 Position : POSITION;
+    float4 Position : SV_POSITION;
     float4 Color : COLOR;
 };
 
