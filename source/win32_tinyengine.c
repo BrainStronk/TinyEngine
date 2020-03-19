@@ -1412,9 +1412,20 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
                             {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
                         };
+
+                        DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
                         read_file_debug ShaderCode = Win32ReadFileDebug("shaders.fxc");
                         ID3D11InputLayout *InputLayout;
                         Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout);
+
+                        // Vertex Shader *********/
+                        ID3D11VertexShader *VertexShader;
+                        Device->lpVtbl->CreateVertexShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &VertexShader); 
+
+                        // Pixel Shader *********/
+                        ID3D11PixelShader *PixelShader;
+                        Device->lpVtbl->CreatePixelShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &PixelShader);
 
                         // Vertex Buffer *********/
                         f32 Vertices[] = \
@@ -1426,7 +1437,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             -1.0f, -1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,
                             -1.0f,  1.0f,  1.0f, 0.0f,  1.0f, 0.0f, 0.0f, 1.0f,
                              1.0f,  1.0f,  1.0f, 0.0f,  0.0f, 1.0f, 0.0f, 1.0f,
-                             1.0f, -1.0f,  1.0f, 0.0f,  1.0f, 5.0f, 5.0f, 1.0f,
+                             1.0f, -1.0f,  1.0f, 0.0f,  1.0f, 0.5f, 0.5f, 1.0f,
                         };
 
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
