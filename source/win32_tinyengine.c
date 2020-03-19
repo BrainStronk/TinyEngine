@@ -1430,14 +1430,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         // Vertex Buffer *********/
                         f32 Vertices[] = \
                         { // float4 POSITION, float4 COLOR
-                            -1.0f, -1.0f, -1.0f, 0.0f,  1.0f, 1.0f, 1.0f, 1.0f,
-                            -1.0f,  1.0f, -1.0f, 0.0f,  0.0f, 1.0f, 1.0f, 1.0f,
-                             1.0f,  1.0f, -1.0f, 0.0f,  1.0f, 0.0f, 1.0f, 1.0f,
-                             1.0f, -1.0f, -1.0f, 0.0f,  1.0f, 1.0f, 0.0f, 1.0f,
-                            -1.0f, -1.0f,  1.0f, 0.0f,  0.0f, 0.0f, 1.0f, 1.0f,
-                            -1.0f,  1.0f,  1.0f, 0.0f,  1.0f, 0.0f, 0.0f, 1.0f,
-                             1.0f,  1.0f,  1.0f, 0.0f,  0.0f, 1.0f, 0.0f, 1.0f,
-                             1.0f, -1.0f,  1.0f, 0.0f,  1.0f, 0.5f, 0.5f, 1.0f,
+                            -1.0f, -1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 1.0f, 1.0f,
+                            -1.0f,  1.0f, -1.0f, 0.0f,   0.0f, 1.0f, 1.0f, 1.0f,
+                             1.0f,  1.0f, -1.0f, 0.0f,   1.0f, 0.0f, 1.0f, 1.0f,
+                             1.0f, -1.0f, -1.0f, 0.0f,   1.0f, 1.0f, 0.0f, 1.0f,
+                            -1.0f, -1.0f,  1.0f, 0.0f,   0.0f, 0.0f, 1.0f, 1.0f,
+                            -1.0f,  1.0f,  1.0f, 0.0f,   1.0f, 0.0f, 0.0f, 1.0f,
+                             1.0f,  1.0f,  1.0f, 0.0f,   0.0f, 1.0f, 0.0f, 1.0f,
+                             1.0f, -1.0f,  1.0f, 0.0f,   1.0f, 0.5f, 0.5f, 1.0f,
                         };
 
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
@@ -1504,6 +1504,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
 
+                            DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
+                            DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
                             DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
 
                             // XInput
