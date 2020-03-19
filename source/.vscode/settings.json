@@ -3,6 +3,7 @@
         "tinyengine_platform.h": "c",
         "tinyengine_actions.h": "c",
         "audioclient.h": "c",
-        "math.h": "c"
+        "math.h": "c",
+        "d3d11shader.h": "c"
     }
 }

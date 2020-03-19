@@ -1413,19 +1413,26 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
                         };
 
-                        DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-
                         read_file_debug ShaderCode = Win32ReadFileDebug("shaders.fxc");
                         ID3D11InputLayout *InputLayout;
-                        Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout);
+                        if(Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), &ShaderCode.Contents, ShaderCode.FileSize, &InputLayout) != S_OK)
+                        {
+                            Win32PrintDebugString("Fail!\n");
+                        }
 
                         // Vertex Shader *********/
                         ID3D11VertexShader *VertexShader;
-                        Device->lpVtbl->CreateVertexShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &VertexShader); 
+                        if(Device->lpVtbl->CreateVertexShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &VertexShader) != S_OK) 
+                        {
+                            Win32PrintDebugString("Fail!\n");
+                        }
 
                         // Pixel Shader *********/
                         ID3D11PixelShader *PixelShader;
-                        Device->lpVtbl->CreatePixelShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &PixelShader);
+                        if(Device->lpVtbl->CreatePixelShader(Device, ShaderCode.Contents, ShaderCode.FileSize, 0, &PixelShader) != S_OK)
+                        {
+                            Win32PrintDebugString("Fail!\n");
+                        }
 
                         // Vertex Buffer *********/
                         f32 Vertices[] = \
@@ -1449,11 +1456,13 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         VertexData.pSysMem = Vertices;
 
                         ID3D11Buffer *VertexBuffer = 0;
-                        Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexData, &VertexBuffer);
+                        if(Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexData, &VertexBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("Fail!\n");
+                        }
 
                         UINT Stride = 4 + 4; // sizeof(POSITION + COLOR)
                         UINT Offset = 0;
-                        DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
 
                         // Index Buffer *********/
                         UINT Indices[] = \
@@ -1479,8 +1488,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ID3D11Buffer *IndexBuffer = 0;
                         Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexData, &IndexBuffer);
 
-                        DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
-
                         // Bind to device with DeviceContext->lpVtbl->VSSetShader
                 //  }
 
@@ -1498,14 +1505,21 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
-                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
-
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
 
+                            // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
+                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+
+                            DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                            DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, InputLayout);
+
                             DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
                             DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
+
+                            DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
+                            DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+
                             DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
 
                             // XInput
