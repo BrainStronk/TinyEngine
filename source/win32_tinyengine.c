@@ -178,7 +178,7 @@ Win32InitD3D11(HWND Window)
     b32 Result = false;
 
     UINT Flags = 0;
-#if TINYENGINE_DEBUG
+#if TINY_ENGINE_DEBUG
     Flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
