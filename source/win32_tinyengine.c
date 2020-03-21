@@ -1439,9 +1439,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         f32 Vertices[] = \
                         { // float4 POSITION, float4 COLOR
                             -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-                            -1.0f,  1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-                             1.0f,  1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-                             1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+                            -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+                            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+                            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
                         };
 
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
@@ -1458,7 +1458,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Win32PrintDebugString("Fail!\n");
                         }
 
-                        UINT Stride = sizeof(Vertices); // sizeof(POSITION + COLOR)
+                        UINT Stride = 32; // sizeof(POSITION + COLOR)
                         UINT Offset = 0;
 
                         // Index Buffer *********/
@@ -1481,6 +1481,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         {
                             Win32PrintDebugString("Fail!\n");
                         }
+
+                        // Bind to device with DeviceContext->lpVtbl->VSSetShader
                 //  }
 
                     if(ShowWindow(Window, SW_SHOW) == 0)
