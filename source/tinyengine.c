@@ -63,7 +63,7 @@ Tiny_Update(tiny_platform *Platform)
     {
         // Mouse
         s32 MouseWheelDelta = 0;
-        u32 MouseX = 0;
+        u32 MouseX = 0; 
         u32 MouseY = 0;
         b32 ThereWasAMouseMoveEvent = false;
 

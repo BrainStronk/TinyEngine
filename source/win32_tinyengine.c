@@ -229,7 +229,7 @@ Win32InitD3D11(HWND Window)
                     }
 
                     DXGI_SWAP_CHAIN_DESC SwapchainDescription = {0};
-                    SwapchainDescription.BufferDesc.Width = GetSystemMetrics(SM_CXSCREEN); // NOTE(zak): We will make the Swapchain's with and height the size of the monitor, so that we only need to resize the viewport and not the buffers when we get WM_SIZE
+                    SwapchainDescription.BufferDesc.Width = GetSystemMetrics(SM_CXSCREEN); // NOTE(zak): We will make the Swapchain's width and height the size of the monitor, so that we only need to resize the viewport and not the buffers when we get WM_SIZE
                     SwapchainDescription.BufferDesc.Height = GetSystemMetrics(SM_CYSCREEN);
                     SwapchainDescription.BufferDesc.RefreshRate.Numerator = MonitorHz;
                     SwapchainDescription.BufferDesc.RefreshRate.Denominator = 1;
@@ -260,8 +260,9 @@ Win32InitD3D11(HWND Window)
                                 if(GetWindowRect(Window, &WindowRect))
                                 {
                                     D3D11_VIEWPORT Viewport = {0};
-                                    Viewport.Width = (FLOAT)(WindowRect.right - WindowRect.bottom);
-                                    Viewport.Height = (FLOAT)(WindowRect.bottom - WindowRect.top);
+
+                                    Viewport.Width = (FLOAT)SwapchainDescription.BufferDesc.Width;//(FLOAT)(WindowRect.right - WindowRect.left);
+                                    Viewport.Height = (FLOAT)SwapchainDescription.BufferDesc.Height;//(FLOAT)(WindowRect.bottom - WindowRect.top);
                                     Viewport.MaxDepth = 1.0f;
 
                                     DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
@@ -1210,7 +1211,6 @@ Win32FillXInputControllerThumbstickValues(tiny_event_controller *TinyController,
     TinyController->DeadzonedX = (TinyController->ActualX < Deadzone) ? (TinyController->ActualX + Deadzone) : TinyController->DeadzonedX;
     TinyController->DeadzonedY = (TinyController->ActualY > Deadzone) ? (TinyController->ActualY - Deadzone) : 0;
     TinyController->DeadzonedY = (TinyController->ActualY < Deadzone) ? (TinyController->ActualY + Deadzone) : TinyController->DeadzonedY;
-    
 
     if(TinyController->Magnitude > (u32)Deadzone)
     {
@@ -1273,12 +1273,6 @@ Win32PushValidXInputThumbstickEvents(int ControllerNumber, XINPUT_GAMEPAD Contro
     }
 }
 
-typedef struct vertex
-{
-    hmm_vec4 Position;
-    hmm_vec4 Color;
-} vertex;
-
 typedef struct read_file_debug
 {
     void *Contents;
@@ -1304,7 +1298,6 @@ Win32ReadFileDebug(char *Filename)
                 DWORD BytesRead;
                 if(ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) && (FileSize32 == BytesRead))
                 {
-                    // NOTE(casey): File read successfully
                     Result.FileSize = FileSize32;
                 }
                 else
@@ -1330,6 +1323,269 @@ Win32ReadFileDebug(char *Filename)
     {
         // TODO(hayden): Logging
     }
+
+    return(Result);
+}
+
+typedef struct v3
+{
+    f32 X;
+    f32 Y;
+    f32 Z;
+} v3;
+
+typedef struct v4
+{
+    f32 X;
+    f32 Y;
+    f32 Z;
+    f32 W;
+} v4;
+
+typedef struct m4x4
+{
+    /* NOTE: Row-major!
+    ** Ax, Ay, Az, Aw,
+    ** Bx, By, Bz, Bw,
+    ** Cx, Cy, Cz, Cw,
+    ** Dx, Dy, Dz, Dw,
+    */
+
+    f32 E[4][4];
+} m4x4;
+
+m4x4
+TinyMath_MatrixIdentity(void)
+{
+    m4x4 Result = \
+    {
+        {
+            {1, 0, 0, 0},
+            {0, 1, 0, 0},
+            {0, 0, 1, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixScale(v3 S)
+{
+    m4x4 Result = \
+    {
+        {
+            {S.X, 0,   0,   0},
+            {0,   S.Y, 0,   0},
+            {0,   0,   S.Z, 0},
+            {0,   0,   0,   1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateX(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            {1, 0, 0, 0},
+            {0, C,-S, 0},
+            {0, S, C, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateY(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            { C, 0, S, 0},
+            { 0, 1, 0, 0},
+            {-S, 0, C, 0},
+            { 0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateZ(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            {C,-S, 0, 0},
+            {S, C, 0, 0},
+            {0, 0, 1, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixTranslate(v3 T)
+{
+    m4x4 Result = \
+    {
+        {
+            {1,   0,   0, T.X},
+            {0,   1,   0, T.Y},
+            {0,   0,   1, T.Z},
+            {0,   0,   0,   1},
+        }
+    };
+    
+    return(Result);
+}
+
+v4
+TinyMath_MultiplyM4x4ByV4(m4x4 M, v4 V)
+{
+    v4 Result = \
+    {
+        .X = {M.E[0][0]*V.X + M.E[0][1]*V.Y + M.E[0][2]*V.Z + M.E[0][3]*V.W},
+        .Y = {M.E[1][0]*V.X + M.E[1][1]*V.Y + M.E[1][2]*V.Z + M.E[1][3]*V.W},
+        .Z = {M.E[2][0]*V.X + M.E[2][1]*V.Y + M.E[2][2]*V.Z + M.E[2][3]*V.W},
+        .W = {M.E[3][0]*V.X + M.E[3][1]*V.Y + M.E[3][2]*V.Z + M.E[3][3]*V.W},
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MultiplyM4x4(m4x4 Left, m4x4 Right)
+{
+    m4x4 Result = {0};
+
+    for(int Row = 0; Row < 4; ++Row)
+    {
+        for(int Column = 0; Column < 4; ++Column)
+        {
+            for(int Current = 0; Current < 4; ++Current)
+            {
+                Result.E[Row][Column] += Left.E[Row][Current] * Right.E[Current][Column];
+            }
+        }
+    }
+
+    return(Result);
+}
+
+f32
+TinyMath_MagnitudeV3(v3 V)
+{
+    f32 Result = sqrtf(V.X*V.X + V.Y*V.Y + V.Z*V.Z);
+    return(Result);
+}
+
+v3
+TinyMath_DivideV3(v3 V, f32 N)
+{
+    v3 Result = V;
+
+    Result.X /= N;
+    Result.Y /= N;
+    Result.Z /= N;
+
+    return(Result);
+}
+
+v3
+TinyMath_NormalizeV3(v3 V)
+{
+    v3 Result = V;
+
+    f32 Magnitude = TinyMath_MagnitudeV3(Result);
+
+    Result = TinyMath_DivideV3(Result, Magnitude);
+
+    return(Result);
+}
+
+v3
+TinyMath_SubtractV3(v3 Left, v3 Right)
+{
+    v3 Result;
+
+    Result.X = Left.X - Right.X;
+    Result.Y = Left.Y - Right.Y;
+    Result.Z = Left.Z - Right.Z;
+
+    return(Result);
+}
+
+v3
+TinyMath_Cross(v3 Left, v3 Right)
+{
+    v3 Result;
+
+    Result.X = Left.Y*Right.Z - Left.Z*Right.Y;
+    Result.Y = Left.Z*Right.X - Left.X*Right.Z;
+    Result.Z = Left.X*Right.Y - Left.Y*Right.X;
+
+    return(Result);
+}
+
+f32
+TinyMath_DotV3(v3 Left, v3 Right)
+{
+    f32 Result = Left.X*Right.X + Left.Y*Right.Y + Left.Z*Right.Z;
+    return(Result);
+}
+
+m4x4
+TinyMath_LookAt(v3 EyePosition, v3 FocusPosition, v3 UpDirection)
+{
+    v3 AimDirectionZ = TinyMath_NormalizeV3(TinyMath_SubtractV3(FocusPosition, EyePosition));
+    v3 LocalCameraX = TinyMath_NormalizeV3(TinyMath_Cross(UpDirection, AimDirectionZ));
+    v3 LocalCameraY = TinyMath_Cross(AimDirectionZ, LocalCameraX);
+
+    v3 X = LocalCameraX;
+    v3 Y = LocalCameraY;
+    v3 Z = AimDirectionZ;
+
+    m4x4 Result;
+
+    Result.E[0][0] = X.X;
+    Result.E[0][1] = X.Y;
+    Result.E[0][2] = X.Z;
+    Result.E[0][3] = TinyMath_DotV3(EyePosition, X);
+
+    Result.E[1][0] = Y.X;
+    Result.E[1][1] = Y.Y;
+    Result.E[1][2] = Y.Z;
+    Result.E[1][3] = TinyMath_DotV3(EyePosition, Y);
+
+    Result.E[2][0] = Z.X;
+    Result.E[2][1] = Z.Y;
+    Result.E[2][2] = Z.Z;
+    Result.E[2][3] = TinyMath_DotV3(EyePosition, Z);
+
+    Result.E[3][0] = 0;
+    Result.E[3][1] = 0;
+    Result.E[3][2] = 0;
+    Result.E[3][3] = 1;
 
     return(Result);
 }
@@ -1402,7 +1658,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         }
                     }
 
-                    // D3D 11
+                    // D3D11
                 //  {
                         // TODO(hayden): Hot path for debug shader reloading
 
@@ -1417,14 +1673,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ID3D11InputLayout *InputLayout;
                         if(Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), VertexShaderCode.Contents, VertexShaderCode.FileSize, &InputLayout) != S_OK)
                         {
-                            Win32PrintDebugString("Fail!\n");
+                            Win32PrintDebugString("CreateInputLayout() Failed!\n");
                         }
 
                         // Vertex Shader *********/
                         ID3D11VertexShader *VertexShader;
                         if(Device->lpVtbl->CreateVertexShader(Device, VertexShaderCode.Contents, VertexShaderCode.FileSize, 0, &VertexShader) != S_OK) 
                         {
-                            Win32PrintDebugString("Fail!\n");
+                            Win32PrintDebugString("CreateVertexShader() Failed!\n");
                         }
 
                         // Pixel Shader *********/
@@ -1432,22 +1688,52 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ID3D11PixelShader *PixelShader;
                         if(Device->lpVtbl->CreatePixelShader(Device, PixelShaderCode.Contents, PixelShaderCode.FileSize, 0, &PixelShader) != S_OK)
                         {
-                            Win32PrintDebugString("Fail!\n");
+                            Win32PrintDebugString("CreatePixelShader() Failed!\n");
                         }
 
+                        // Rasterizer *********/
+                        // Sampler *********/
+                        // Blend State *********/
+                        // Constant Buffer *********/
+
+                        m4x4 ScaleMatrix = TinyMath_MatrixScale((v3){1, 1, 1});
+                        //m4x4 RotationMatrixX = TinyMath_MatrixRotateX(1.25f);
+                        //m4x4 RotationMatrixY = TinyMath_MatrixRotateY(.5f);
+                        m4x4 RotationMatrixZ = TinyMath_MatrixRotateZ(0);
+                        m4x4 TranslationMatrix = TinyMath_MatrixTranslate((v3){0, 0, 0});
+
+                        m4x4 TransformMatrix;
+                        TransformMatrix = TinyMath_MultiplyM4x4(RotationMatrixZ, ScaleMatrix);
+                        TransformMatrix = TinyMath_MultiplyM4x4(TranslationMatrix, TransformMatrix);
+
+                        v4 V1 = {-1.0f, -1.0f, 1.0f, 1.0f};
+                        v4 V2 = {-1.0f,  1.0f, 1.0f, 1.0f};
+                        v4 V3 = { 1.0f,  1.0f, 1.0f, 1.0f};
+                        v4 V4 = { 1.0f, -1.0f, 1.0f, 1.0f};
+
+                        v3 CameraEye = {10, 10, 10};
+                        v3 CameraFocus = {0, 0, 0};
+                        v3 CameraUp = {0, 1, 0};
+                        TransformMatrix = TinyMath_MultiplyM4x4(TransformMatrix, TinyMath_LookAt(CameraEye, CameraFocus, CameraUp));
+
+                        V1 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V1);
+                        V2 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V2);
+                        V3 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V3);
+                        V4 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V4);
+
                         // Vertex Buffer *********/
-                        f32 Vertices[] = \
-                        { // float4 POSITION, float4 COLOR
-                            -1.0f, -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-                            -1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
-                            1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
-                            1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f,
+                        v4 Vertices[] = \
+                        { // v4 POSITION, v4 COLOR
+                            V1, (v4){1.0f, 0.0f, 0.0f, 1.0f},
+                            V2, (v4){0.0f, 1.0f, 0.0f, 1.0f},
+                            V3, (v4){0.0f, 0.0f, 1.0f, 1.0f},
+                            V4, (v4){0.0f, 1.0f, 0.0f, 1.0f},
                         };
 
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
-                        VertexBufferDesc.ByteWidth = sizeof(Vertices);
-                        VertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
-                        VertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+                        VertexBufferDesc.ByteWidth         = sizeof(Vertices);
+                        VertexBufferDesc.Usage             = D3D11_USAGE_IMMUTABLE;
+                        VertexBufferDesc.BindFlags         = D3D11_BIND_VERTEX_BUFFER;
 
                         D3D11_SUBRESOURCE_DATA VertexData = {0};
                         VertexData.pSysMem = Vertices;
@@ -1455,7 +1741,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ID3D11Buffer *VertexBuffer = 0;
                         if(Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexData, &VertexBuffer) != S_OK)
                         {
-                            Win32PrintDebugString("Fail!\n");
+                            Win32PrintDebugString("CreateBuffer(VertexBuffer) Failed!\n");
                         }
 
                         UINT Stride = 32; // sizeof(POSITION + COLOR)
@@ -1470,19 +1756,73 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                         D3D11_BUFFER_DESC IndexBufferDesc = {0};
                         IndexBufferDesc.ByteWidth = sizeof(Indices);
-                        IndexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+                        IndexBufferDesc.Usage     = D3D11_USAGE_IMMUTABLE;
                         IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 
                         D3D11_SUBRESOURCE_DATA IndexData = {0};
-                        IndexData.pSysMem = Indices;
+                        IndexData.pSysMem         = Indices;
 
                         ID3D11Buffer *IndexBuffer = 0;
                         if(Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexData, &IndexBuffer) != S_OK)
                         {
-                            Win32PrintDebugString("Fail!\n");
+                            Win32PrintDebugString("CreateBuffer(IndexBuffer) Failed!\n");
                         }
 
-                        // Bind to device with DeviceContext->lpVtbl->VSSetShader
+#if 0
+                        // NOTE(hayden): This stuff is experimental, it doesn't do anything right now
+                        // Texture *********/
+                        UINT Texels[] = \
+                        {
+                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
+                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
+                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
+                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
+                        };
+
+                        #define TEXTURE_WIDTH 4
+                        #define TEXTURE_HEIGHT 4
+
+                        D3D11_TEXTURE2D_DESC Texture2DDesc = {0};
+                        Texture2DDesc.Width            = TEXTURE_WIDTH;
+                        Texture2DDesc.Height           = TEXTURE_HEIGHT;
+                        Texture2DDesc.MipLevels        = 1;
+                        Texture2DDesc.ArraySize        = 1;
+                        Texture2DDesc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+                        Texture2DDesc.SampleDesc.Count = 1;
+                        Texture2DDesc.Usage            = D3D11_USAGE_IMMUTABLE;
+                        Texture2DDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+
+                        D3D11_SUBRESOURCE_DATA TextureData = {0};
+                        TextureData.pSysMem            = Texels;
+                        TextureData.SysMemPitch        = 4 * 4; // 4 bytes per pixel
+
+                        ID3D11Texture2D *Texture;
+                        if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateTexture2D() Failed!\n");
+                        }
+
+                        ID3D11ShaderResourceView *TextureShaderResourceView;
+                        if(Device->lpVtbl->CreateShaderResourceView(Device, (ID3D11Resource *)Texture, 0, &TextureShaderResourceView) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateShaderResourceView() Failed!\n");
+                        }
+#endif
+
+                        // Set Stuff *********/
+                        // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see
+                        DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+
+                        DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                        DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, InputLayout);
+
+                        DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
+
+                        DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
+                        //DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+
+                        DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
+                        DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
                 //  }
 
                     if(ShowWindow(Window, SW_SHOW) == 0)
@@ -1536,18 +1876,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-
-                            // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
-                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
-
-                            DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-                            DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, InputLayout);
-
-                            DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
-                            DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
-
-                            DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
-                            DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
 
                             DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
 

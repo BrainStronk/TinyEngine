@@ -12,7 +12,7 @@ IF NOT EXIST ..\build mkdir ..\build
 pushd ..\build
 
 set CompilerFlags=-nologo -EHa- -FC -fp:fast -Gm- -GR- -MTd -Od -Oi -W4 -WX -Z7
-set OffErrors=-wd4201 -wd4100 -wd4189 -wd4505
+set OffErrors=-wd4201 -wd4100 -wd4189 -wd4505 -wd4204
 
 fxc -nologo -EVS -Tvs_4_0 -Fovertex_shader.fxc ..\source\shaders.hlsl
 fxc -nologo -EPS -Tps_4_0 -Fopixel_shader.fxc ..\source\shaders.hlsl

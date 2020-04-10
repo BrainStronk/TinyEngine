@@ -10,6 +10,12 @@ PS(vs_out Input) : SV_TARGET
     return(Input.Color);
 }
 
+float4 
+ConvertScreenspaceToViewspace(float4 Position : POSITION, int ScreenWidth, int ScreenHeight)
+{
+    
+}
+
 vs_out
 VS(float4 Position : POSITION, float4 Color : COLOR)
 {
