@@ -1615,6 +1615,8 @@ typedef struct constant_buffer
 {
     int ScreenWidth;
     int ScreenHeight;
+    int Padding;
+    int Padding2;
 } constant_buffer;
 
 int WINAPI
@@ -1804,7 +1806,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ConstantBufferDesc.ByteWidth      = sizeof(constant_buffer);
                         ConstantBufferDesc.Usage          = D3D11_USAGE_DEFAULT;
                         ConstantBufferDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
-                        ConstantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
                         D3D11_SUBRESOURCE_DATA ConstantBufferSubresourceData = {0};
                         ConstantBufferSubresourceData.pSysMem = &ConstantBufferData;

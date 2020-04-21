@@ -8,6 +8,8 @@ cbuffer constant_buffer
 {
     int ScreenWidth;
     int ScreenHeight;
+    int Padding;
+    int Padding2;
 };
 
 float4
@@ -32,9 +34,10 @@ VS(float4 Position : POSITION, float4 Color : COLOR)
 {
     vs_out Output;
 
-    // Position = ConvertScreenspaceToViewspace(Position);
+    Position = ConvertScreenspaceToViewspace(Position);
 
     Output.Position = Position;
     Output.Color = Color;
+    
     return(Output);
 }
