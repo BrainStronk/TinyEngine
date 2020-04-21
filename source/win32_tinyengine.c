@@ -26,6 +26,8 @@
 #include "tinyengine_platform.h"
 
 static b32 IsRunning;
+static u32 ScreenWidth;
+static u32 ScreenHeight;
 static ID3D11Device *Device;
 static ID3D11DeviceContext *DeviceContext;
 static IDXGISwapChain *Swapchain;
@@ -259,6 +261,9 @@ Win32InitD3D11(HWND Window)
                                 RECT WindowRect = {0};
                                 if(GetWindowRect(Window, &WindowRect))
                                 {
+                                    ScreenWidth = SwapchainDescription.BufferDesc.Width;
+                                    ScreenHeight = SwapchainDescription.BufferDesc.Height;
+
                                     D3D11_VIEWPORT Viewport = {0};
 
                                     Viewport.Width = (FLOAT)SwapchainDescription.BufferDesc.Width;//(FLOAT)(WindowRect.right - WindowRect.left);
@@ -1087,6 +1092,22 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             Tiny_PushInputEvent(Event);
         } break;
 
+        case WM_SIZE:
+        {
+            int Width = GetSystemMetrics(SM_CXSCREEN);
+            int Height = GetSystemMetrics(SM_CYSCREEN);
+
+            ScreenWidth = Width;
+            ScreenHeight = Height;
+
+            D3D11_VIEWPORT Viewport = {0};
+            Viewport.Width = (FLOAT)Width;
+            Viewport.Height = (FLOAT)Height;
+            Viewport.MaxDepth = 1.0f;
+
+            DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+        } break;
+
         default:
         {
             Result = DefWindowProcW(Window, Message, WParam, LParam);
@@ -1590,6 +1611,12 @@ TinyMath_LookAt(v3 EyePosition, v3 FocusPosition, v3 UpDirection)
     return(Result);
 }
 
+typedef struct constant_buffer
+{
+    int ScreenWidth;
+    int ScreenHeight;
+} constant_buffer;
+
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
 {
@@ -1696,30 +1723,30 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         // Blend State *********/
                         // Constant Buffer *********/
 
-                        m4x4 ScaleMatrix = TinyMath_MatrixScale((v3){1, 1, 1});
+                        //m4x4 ScaleMatrix = TinyMath_MatrixScale((v3){1, 1, 1});
                         //m4x4 RotationMatrixX = TinyMath_MatrixRotateX(1.25f);
                         //m4x4 RotationMatrixY = TinyMath_MatrixRotateY(.5f);
-                        m4x4 RotationMatrixZ = TinyMath_MatrixRotateZ(0);
-                        m4x4 TranslationMatrix = TinyMath_MatrixTranslate((v3){0, 0, 0});
+                        //m4x4 RotationMatrixZ = TinyMath_MatrixRotateZ(0);
+                        //m4x4 TranslationMatrix = TinyMath_MatrixTranslate((v3){0, 0, 0});
 
-                        m4x4 TransformMatrix;
-                        TransformMatrix = TinyMath_MultiplyM4x4(RotationMatrixZ, ScaleMatrix);
-                        TransformMatrix = TinyMath_MultiplyM4x4(TranslationMatrix, TransformMatrix);
+                        //m4x4 TransformMatrix;
+                        //TransformMatrix = TinyMath_MultiplyM4x4(RotationMatrixZ, ScaleMatrix);
+                        //TransformMatrix = TinyMath_MultiplyM4x4(TranslationMatrix, TransformMatrix);
 
-                        v4 V1 = {-1.0f, -1.0f, 1.0f, 1.0f};
-                        v4 V2 = {-1.0f,  1.0f, 1.0f, 1.0f};
-                        v4 V3 = { 1.0f,  1.0f, 1.0f, 1.0f};
-                        v4 V4 = { 1.0f, -1.0f, 1.0f, 1.0f};
+                        v4 V1 = { 0.0f,  0.0f, 1.0f, 1.0f};
+                        v4 V2 = { 0.0f, 50.0f, 1.0f, 1.0f};
+                        v4 V3 = {50.0f, 50.0f, 1.0f, 1.0f};
+                        v4 V4 = {50.0f,  0.0f, 1.0f, 1.0f};
 
                         v3 CameraEye = {10, 10, 10};
                         v3 CameraFocus = {0, 0, 0};
                         v3 CameraUp = {0, 1, 0};
-                        TransformMatrix = TinyMath_MultiplyM4x4(TransformMatrix, TinyMath_LookAt(CameraEye, CameraFocus, CameraUp));
+                        //TransformMatrix = TinyMath_MultiplyM4x4(TransformMatrix, TinyMath_LookAt(CameraEye, CameraFocus, CameraUp));
 
-                        V1 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V1);
-                        V2 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V2);
-                        V3 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V3);
-                        V4 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V4);
+                        //V1 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V1);
+                        //V2 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V2);
+                        //V3 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V3);
+                        //V4 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V4);
 
                         // Vertex Buffer *********/
                         v4 Vertices[] = \
@@ -1766,6 +1793,26 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         if(Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexData, &IndexBuffer) != S_OK)
                         {
                             Win32PrintDebugString("CreateBuffer(IndexBuffer) Failed!\n");
+                        }
+
+                        // Constant Buffer *********/
+                        constant_buffer ConstantBufferData;
+                        ConstantBufferData.ScreenWidth  = ScreenWidth;
+                        ConstantBufferData.ScreenHeight = ScreenHeight;
+
+                        D3D11_BUFFER_DESC ConstantBufferDesc = {0};
+                        ConstantBufferDesc.ByteWidth      = sizeof(constant_buffer);
+                        ConstantBufferDesc.Usage          = D3D11_USAGE_DEFAULT;
+                        ConstantBufferDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+                        ConstantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+                        D3D11_SUBRESOURCE_DATA ConstantBufferSubresourceData = {0};
+                        ConstantBufferSubresourceData.pSysMem = &ConstantBufferData;
+
+                        ID3D11Buffer *ConstantBuffer = 0;
+                        if(Device->lpVtbl->CreateBuffer(Device, &ConstantBufferDesc, &ConstantBufferSubresourceData, &ConstantBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateBuffer(ConstantBuffer) Failed!\n");
                         }
 
 #if 0
@@ -1820,6 +1867,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                         DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
                         //DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+
+                        DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &ConstantBuffer);
 
                         DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
                         DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
@@ -1896,7 +1945,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 }
                 else
                 {
-                    // TODO(zak): Loggings
+                    // TODO(zak): Logging
                 }
             }
             else
