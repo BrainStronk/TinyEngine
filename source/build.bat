@@ -17,6 +17,6 @@ set OffErrors=-wd4201 -wd4100 -wd4189 -wd4505 -wd4204
 fxc -nologo -EVS -Tvs_4_0 -Fovertex_shader.fxc ..\source\shaders.hlsl
 fxc -nologo -EPS -Tps_4_0 -Fopixel_shader.fxc ..\source\shaders.hlsl
 
-cl %CompilerFlags% %OffErrors% -DTINY_ENGINE_DEBUG=1 ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib xinput.lib
+cl %CompilerFlags% %OffErrors% -DTINY_ENGINE_DEBUG=1 ..\source\win32_tinyengine.c /link user32.lib d3d11.lib dxguid.lib ole32.lib xinput.lib windowscodecs.lib
 
 popd

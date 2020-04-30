@@ -1,7 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <windowsx.h>
+#include <wincodec.h>
 #include <xinput.h>
+#include <combaseapi.h>
 
 #define CINTERFACE
 #define COBJMACROS
@@ -18,6 +20,12 @@
 #endif
 #include "stb_sprintf.h"
 
+#ifndef STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_FAILURE_USERMSG
+#endif
+#include "stb_image.h"
+
 #include <math.h>
 
 #include "handmademath.h"
@@ -26,6 +34,7 @@
 #include "tinyengine_platform.h"
 
 static b32 IsRunning;
+static b32 D3DInitialized;
 static u32 ScreenWidth;
 static u32 ScreenHeight;
 static ID3D11Device *Device;
@@ -192,10 +201,10 @@ Win32InitD3D11(HWND Window)
     };
 
     // TODO(zak): Using the default adapter is not a great idea on systems with multiple gpus, handle this.
-    if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) !=  0)
+    if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) != 0)
     {
         // TODO(zak): Log something saying we couldn't create the device with the hardware driver so now we will try the warp driver instead.
-        if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_WARP, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) !=  0)
+        if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_WARP, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) != 0)
         {
             // TODO(zak): Log error that we couldn't initialize d3d11 with the warp driver either
         }
@@ -230,49 +239,50 @@ Win32InitD3D11(HWND Window)
                         // TODO(zak): Logging we weren't able to query the monitorhz falling back to 60
                     }
 
-                    DXGI_SWAP_CHAIN_DESC SwapchainDescription = {0};
-                    SwapchainDescription.BufferDesc.Width = GetSystemMetrics(SM_CXSCREEN); // NOTE(zak): We will make the Swapchain's width and height the size of the monitor, so that we only need to resize the viewport and not the buffers when we get WM_SIZE
-                    SwapchainDescription.BufferDesc.Height = GetSystemMetrics(SM_CYSCREEN);
-                    SwapchainDescription.BufferDesc.RefreshRate.Numerator = MonitorHz;
-                    SwapchainDescription.BufferDesc.RefreshRate.Denominator = 1;
-                    SwapchainDescription.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; // BGRA Blts are faster than RGBA blts in d3d11 
-                    SwapchainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-                    SwapchainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-                    SwapchainDescription.SampleDesc.Count = 1; // NOTE(zak): If we ever want MSAA you turn it on here
-                    SwapchainDescription.SampleDesc.Quality = 0;
-                    SwapchainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-                    SwapchainDescription.BufferCount = 1; // NOTE(zak): When/If this Swapchain goes full screen the buffer count needs to be increased to two as it wont be able to use desktop as its front buffer.
-                    SwapchainDescription.OutputWindow = Window;
-                    SwapchainDescription.Windowed = 1;
-                    SwapchainDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // TODO(zak): On Win8/10 we should be using Flip model swapchains instead, these are not supported on Win7.
-                    SwapchainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH allows us to switch between a Windows and Fullscreen modes. 
-
-                    if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, (IUnknown*)Device, &SwapchainDescription, &Swapchain) == 0)
+                    RECT WindowRect = {0};
+                    if(GetWindowRect(Window, &WindowRect))
                     {
-                        DXGIFactory->lpVtbl->Release(DXGIFactory);
+                        DXGI_SWAP_CHAIN_DESC SwapchainDescription = {0};
+                        SwapchainDescription.BufferDesc.Width = (UINT)(WindowRect.right - WindowRect.left);
+                        SwapchainDescription.BufferDesc.Height = (UINT)(WindowRect.bottom - WindowRect.top);
+                        SwapchainDescription.BufferDesc.RefreshRate.Numerator = MonitorHz;
+                        SwapchainDescription.BufferDesc.RefreshRate.Denominator = 1;
+                        SwapchainDescription.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; // BGRA Blts are faster than RGBA blts in d3d11 
+                        SwapchainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+                        SwapchainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+                        SwapchainDescription.SampleDesc.Count = 1; // NOTE(zak): If we ever want MSAA you turn it on here
+                        SwapchainDescription.SampleDesc.Quality = 0;
+                        SwapchainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+                        SwapchainDescription.BufferCount = 1; // NOTE(zak): When/If this Swapchain goes full screen the buffer count needs to be increased to two as it wont be able to use desktop as its front buffer.
+                        SwapchainDescription.OutputWindow = Window;
+                        SwapchainDescription.Windowed = 1;
+                        SwapchainDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // TODO(zak): On Win8/10 we should be using Flip model swapchains instead, these are not supported on Win7.
+                        SwapchainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH allows us to switch between a Windows and Fullscreen modes. 
 
-                        ID3D11Texture2D *Backbuffer = 0;
-                        if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void**)&Backbuffer) == 0)
+                        if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, (IUnknown*)Device, &SwapchainDescription, &Swapchain) == 0)
                         {
-                            if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource*)Backbuffer, 0, &RenderTargetView) == 0)
-                            {
-                                Backbuffer->lpVtbl->Release(Backbuffer);
+                            DXGIFactory->lpVtbl->Release(DXGIFactory);
 
-                                RECT WindowRect = {0};
-                                if(GetWindowRect(Window, &WindowRect))
+                            ID3D11Texture2D *Backbuffer = 0;
+                            if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void **)&Backbuffer) == 0)
+                            {
+                                if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource *)Backbuffer, 0, &RenderTargetView) == 0)
                                 {
+                                    Backbuffer->lpVtbl->Release(Backbuffer);
+                                
                                     ScreenWidth = SwapchainDescription.BufferDesc.Width;
                                     ScreenHeight = SwapchainDescription.BufferDesc.Height;
 
                                     D3D11_VIEWPORT Viewport = {0};
 
-                                    Viewport.Width = (FLOAT)SwapchainDescription.BufferDesc.Width;//(FLOAT)(WindowRect.right - WindowRect.left);
-                                    Viewport.Height = (FLOAT)SwapchainDescription.BufferDesc.Height;//(FLOAT)(WindowRect.bottom - WindowRect.top);
+                                    Viewport.Width = (FLOAT)(WindowRect.right - WindowRect.left);
+                                    Viewport.Height = (FLOAT)(WindowRect.bottom - WindowRect.top);
                                     Viewport.MaxDepth = 1.0f;
 
                                     DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
 
                                     Result = true;
+                                    D3DInitialized = true;
                                 }
                                 else
                                 {
@@ -1091,21 +1101,43 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
             Tiny_PushInputEvent(Event);
         } break;
-
+        
         case WM_SIZE:
         {
-            int Width = GetSystemMetrics(SM_CXSCREEN);
-            int Height = GetSystemMetrics(SM_CYSCREEN);
+            int Width = LOWORD(LParam);
+            int Height = HIWORD(LParam);
 
             ScreenWidth = Width;
             ScreenHeight = Height;
 
-            D3D11_VIEWPORT Viewport = {0};
-            Viewport.Width = (FLOAT)Width;
-            Viewport.Height = (FLOAT)Height;
-            Viewport.MaxDepth = 1.0f;
-
-            DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+            if(D3DInitialized)
+            {
+                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 0, 0, 0);
+                RenderTargetView->lpVtbl->Release(RenderTargetView);
+                
+                if(Swapchain->lpVtbl->ResizeBuffers(Swapchain, 0, Width, Height, DXGI_FORMAT_UNKNOWN, 0) == S_OK)
+                {                    
+                    ID3D11Texture2D *BackBuffer;
+                    if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void **)&BackBuffer) == S_OK)
+                    {            
+                        D3D11_RENDER_TARGET_VIEW_DESC RenderTargetViewDescription = {0};
+                        RenderTargetViewDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+                        RenderTargetViewDescription.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                        
+                        if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource *)BackBuffer, &RenderTargetViewDescription, &RenderTargetView) == S_OK)
+                        {
+                            BackBuffer->lpVtbl->Release(BackBuffer);
+                            
+                            D3D11_VIEWPORT Viewport = {0};
+                            Viewport.Width = (FLOAT)Width;
+                            Viewport.Height = (FLOAT)Height;
+                            Viewport.MaxDepth = 1.0f;
+                            
+                            DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+                        }
+                    }
+                }                
+            }
         } break;
 
         default:
@@ -1347,6 +1379,12 @@ Win32ReadFileDebug(char *Filename)
 
     return(Result);
 }
+
+typedef struct v2i
+{
+    int X;
+    int Y;
+} v2i;
 
 typedef struct v3
 {
@@ -1615,9 +1653,58 @@ typedef struct constant_buffer
 {
     int ScreenWidth;
     int ScreenHeight;
+    int FrameCount;
     int Padding;
-    int Padding2;
 } constant_buffer;
+
+typedef struct vertex
+{
+    v4 Position;
+    v4 Color;
+} vertex;
+
+#define TOTAL_RECTANGLES 1000
+int VertexCount = 0;
+int IndexCount = 0;
+
+vertex Vertices[4 * TOTAL_RECTANGLES] = {0};
+u32 Indices[6 * TOTAL_RECTANGLES] = {0};
+
+void
+DrawRectangle(int X, int Y, int W, int H, v4 Color)
+{
+    Indices[IndexCount+0] = VertexCount+0;
+    Indices[IndexCount+1] = VertexCount+1;
+    Indices[IndexCount+2] = VertexCount+2;
+    Indices[IndexCount+3] = VertexCount+3;
+    Indices[IndexCount+4] = VertexCount+2;
+    Indices[IndexCount+5] = VertexCount+1;
+
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color};
+
+    IndexCount += 6;
+}
+
+void
+DrawRectangleColorful(int X, int Y, int W, int H, v4 Color1, v4 Color2, v4 Color3, v4 Color4)
+{
+    Indices[IndexCount+0] = VertexCount+0;
+    Indices[IndexCount+1] = VertexCount+1;
+    Indices[IndexCount+2] = VertexCount+2;
+    Indices[IndexCount+3] = VertexCount+3;
+    Indices[IndexCount+4] = VertexCount+2;
+    Indices[IndexCount+5] = VertexCount+1;
+
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color1};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color2};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color3};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color4};
+
+    IndexCount += 6;
+}
 
 int WINAPI
 WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowCode)
@@ -1629,6 +1716,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
     WindowClass.hCursor = LoadCursor(NULL, IDC_ARROW);
     WindowClass.hIcon = LoadIcon(NULL, IDI_WINLOGO);
     WindowClass.lpszClassName = L"Win32TinyEngineWindowClass"; // NOTE(zak): At somepoint the window class should reflect the applications name
+
+    u32 FrameCount = 0;
 
     if(RegisterClassW(&WindowClass))
     {
@@ -1735,14 +1824,14 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         //TransformMatrix = TinyMath_MultiplyM4x4(RotationMatrixZ, ScaleMatrix);
                         //TransformMatrix = TinyMath_MultiplyM4x4(TranslationMatrix, TransformMatrix);
 
-                        v4 V1 = { 0.0f,  0.0f, 1.0f, 1.0f};
-                        v4 V2 = { 0.0f, 50.0f, 1.0f, 1.0f};
-                        v4 V3 = {50.0f, 50.0f, 1.0f, 1.0f};
-                        v4 V4 = {50.0f,  0.0f, 1.0f, 1.0f};
+                        //v4 V1 = {0.0f,  0.0f,  1.0f, 1.0f};
+                        //v4 V2 = {0.0f,  50.0f, 1.0f, 1.0f};
+                        //v4 V3 = {50.0f, 50.0f, 1.0f, 1.0f};
+                        //v4 V4 = {50.0f, 0.0f,  1.0f, 1.0f};
 
-                        v3 CameraEye = {10, 10, 10};
-                        v3 CameraFocus = {0, 0, 0};
-                        v3 CameraUp = {0, 1, 0};
+                        //v3 CameraEye = {10, 10, 10};
+                        //v3 CameraFocus = {0, 0, 0};
+                        //v3 CameraUp = {0, 1, 0};
                         //TransformMatrix = TinyMath_MultiplyM4x4(TransformMatrix, TinyMath_LookAt(CameraEye, CameraFocus, CameraUp));
 
                         //V1 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V1);
@@ -1751,24 +1840,17 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         //V4 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V4);
 
                         // Vertex Buffer *********/
-                        v4 Vertices[] = \
-                        { // v4 POSITION, v4 COLOR
-                            V1, (v4){1.0f, 0.0f, 0.0f, 1.0f},
-                            V2, (v4){0.0f, 1.0f, 0.0f, 1.0f},
-                            V3, (v4){0.0f, 0.0f, 1.0f, 1.0f},
-                            V4, (v4){0.0f, 1.0f, 0.0f, 1.0f},
-                        };
-
                         D3D11_BUFFER_DESC VertexBufferDesc = {0};
-                        VertexBufferDesc.ByteWidth         = sizeof(Vertices);
-                        VertexBufferDesc.Usage             = D3D11_USAGE_IMMUTABLE;
-                        VertexBufferDesc.BindFlags         = D3D11_BIND_VERTEX_BUFFER;
+                        VertexBufferDesc.ByteWidth      = sizeof(Vertices);
+                        VertexBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+                        VertexBufferDesc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
+                        VertexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-                        D3D11_SUBRESOURCE_DATA VertexData = {0};
-                        VertexData.pSysMem = Vertices;
+                        D3D11_SUBRESOURCE_DATA VertexBufferSubresourceData = {0};
+                        VertexBufferSubresourceData.pSysMem = Vertices;
 
                         ID3D11Buffer *VertexBuffer = 0;
-                        if(Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexData, &VertexBuffer) != S_OK)
+                        if(Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexBufferSubresourceData, &VertexBuffer) != S_OK)
                         {
                             Win32PrintDebugString("CreateBuffer(VertexBuffer) Failed!\n");
                         }
@@ -1776,23 +1858,18 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         UINT Stride = 32; // sizeof(POSITION + COLOR)
                         UINT Offset = 0;
 
-                        // Index Buffer *********/
-                        UINT Indices[] = \
-                        {
-                            0, 1, 2,
-                            0, 2, 3,
-                        };
-
+                        // Index Buffer *********/                        
                         D3D11_BUFFER_DESC IndexBufferDesc = {0};
-                        IndexBufferDesc.ByteWidth = sizeof(Indices);
-                        IndexBufferDesc.Usage     = D3D11_USAGE_IMMUTABLE;
-                        IndexBufferDesc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+                        IndexBufferDesc.ByteWidth      = sizeof(Indices);
+                        IndexBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+                        IndexBufferDesc.BindFlags      = D3D11_BIND_INDEX_BUFFER;
+                        IndexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
-                        D3D11_SUBRESOURCE_DATA IndexData = {0};
-                        IndexData.pSysMem         = Indices;
+                        D3D11_SUBRESOURCE_DATA IndexBufferSubresourceData = {0};
+                        IndexBufferSubresourceData.pSysMem = Indices;
 
                         ID3D11Buffer *IndexBuffer = 0;
-                        if(Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexData, &IndexBuffer) != S_OK)
+                        if(Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexBufferSubresourceData, &IndexBuffer) != S_OK)
                         {
                             Win32PrintDebugString("CreateBuffer(IndexBuffer) Failed!\n");
                         }
@@ -1803,9 +1880,9 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         ConstantBufferData.ScreenHeight = ScreenHeight;
 
                         D3D11_BUFFER_DESC ConstantBufferDesc = {0};
-                        ConstantBufferDesc.ByteWidth      = sizeof(constant_buffer);
-                        ConstantBufferDesc.Usage          = D3D11_USAGE_DEFAULT;
-                        ConstantBufferDesc.BindFlags      = D3D11_BIND_CONSTANT_BUFFER;
+                        ConstantBufferDesc.ByteWidth = sizeof(constant_buffer);
+                        ConstantBufferDesc.Usage     = D3D11_USAGE_DEFAULT;
+                        ConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
 
                         D3D11_SUBRESOURCE_DATA ConstantBufferSubresourceData = {0};
                         ConstantBufferSubresourceData.pSysMem = &ConstantBufferData;
@@ -1816,33 +1893,62 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Win32PrintDebugString("CreateBuffer(ConstantBuffer) Failed!\n");
                         }
 
-#if 0
                         // NOTE(hayden): This stuff is experimental, it doesn't do anything right now
                         // Texture *********/
-                        UINT Texels[] = \
-                        {
-                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
-                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
-                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
-                            0xFFFFFFFF, 0xFF7F7F7F, 0xFFFFFFFF, 0xFF7F7F7F, 
-                        };
+                        UINT ImageWidth, ImageHeight;
+                        UINT ImageComponentsPerPixel;
+                        void *Texels = 0; // ImageData
+                        { // TODO(hayden): Probably pull this out into a function
+                            LPCWSTR Filename = L"../source/friend.png";
+                            IWICImagingFactory *WICImagingFactory = 0;
+	                        if(CoCreateInstance(&CLSID_WICImagingFactory, 0, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, &WICImagingFactory) == 0)
+                            {
+                                IWICBitmapDecoder *Decoder = 0;
+                                if(WICImagingFactory->lpVtbl->CreateDecoderFromFilename(WICImagingFactory, Filename, 0, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder) == 0)
+                                {
+                                    IWICBitmapFrameDecode *Frame;
+                                    if(Decoder->lpVtbl->GetFrame(Decoder, 0, &Frame) == 0)
+                                    {
+                                        IWICBitmapSource *RGBAImageFrame = 0;
+                                        if(WICConvertBitmapSource(&GUID_WICPixelFormat32bppBGRA, (IWICBitmapSource *)Frame, &RGBAImageFrame) == 0)
+                                        {
+                                            UINT TempWidth, TempHeight;
+                                            if(RGBAImageFrame->lpVtbl->GetSize(RGBAImageFrame, &TempWidth, &TempHeight) == 0)
+                                            {
+                                                ImageWidth = TempWidth;
+                                                ImageHeight = TempHeight;
+                                                ImageComponentsPerPixel = 4;
 
-                        #define TEXTURE_WIDTH 4
-                        #define TEXTURE_HEIGHT 4
+                                                Texels = HeapAlloc(GetProcessHeap(), 0, ImageWidth*ImageHeight*ImageComponentsPerPixel);
+                                                if(Texels)
+                                                {
+                                                    if(RGBAImageFrame->lpVtbl->CopyPixels(RGBAImageFrame, 0, ImageWidth*4, ImageWidth*ImageHeight*ImageComponentsPerPixel, (BYTE *)Texels) != 0)
+                                                    {
+                                                        HeapFree(GetProcessHeap(), 0, Texels);
+                                                        __debugbreak();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         D3D11_TEXTURE2D_DESC Texture2DDesc = {0};
-                        Texture2DDesc.Width            = TEXTURE_WIDTH;
-                        Texture2DDesc.Height           = TEXTURE_HEIGHT;
+                        Texture2DDesc.Width            = 32;
+                        Texture2DDesc.Height           = 32;
                         Texture2DDesc.MipLevels        = 1;
                         Texture2DDesc.ArraySize        = 1;
-                        Texture2DDesc.Format           = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+                        Texture2DDesc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
                         Texture2DDesc.SampleDesc.Count = 1;
-                        Texture2DDesc.Usage            = D3D11_USAGE_IMMUTABLE;
+                        Texture2DDesc.Usage            = D3D11_USAGE_DEFAULT;
                         Texture2DDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+                        Texture2DDesc.CPUAccessFlags   = 0;
 
                         D3D11_SUBRESOURCE_DATA TextureData = {0};
-                        TextureData.pSysMem            = Texels;
-                        TextureData.SysMemPitch        = 4 * 4; // 4 bytes per pixel
+                        TextureData.pSysMem = Texels;
+                        TextureData.SysMemPitch = sizeof(Texels);
 
                         ID3D11Texture2D *Texture;
                         if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
@@ -1855,8 +1961,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         {
                             Win32PrintDebugString("CreateShaderResourceView() Failed!\n");
                         }
-#endif
-
+                        
                         // Set Stuff *********/
                         // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see
                         DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
@@ -1924,7 +2029,60 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             Tiny_Update(&GlobalPlatform);
 
-                            float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+                            // Update Vertex/Index Buffer with new Rects
+                            {
+                                D3D11_MAPPED_SUBRESOURCE VertexBufferMappedSubresource = {0};
+                                D3D11_MAPPED_SUBRESOURCE IndexBufferMappedSubresource  = {0};
+                                if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &VertexBufferMappedSubresource) != S_OK)
+                                {
+                                    Win32PrintDebugString("Vertex Buffer Map Failed!\n");
+                                }
+                                if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &IndexBufferMappedSubresource) != S_OK)
+                                {
+                                    Win32PrintDebugString("Index Buffer Map Failed!\n");
+                                }
+                                {
+                                    DrawRectangleColorful(100, 100, 100, 100, 
+                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                        (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
+                                                        (v4){0.0f, 0.0f, 1.0f, 1.0f}, 
+                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f});
+                                    DrawRectangleColorful(600, 600, 200, 200, 
+                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                        (v4){1.0f, 0.0f, 1.0f, 1.0f}, 
+                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                        (v4){1.0f, 1.0f, 1.0f, 1.0f});
+                                    DrawRectangleColorful(850, 200, 50, 50, 
+                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                        (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
+                                                        (v4){0.0f, 0.0f, 1.0f, 1.0f});
+                                    DrawRectangleColorful(1000, 500, 159, 159, 
+                                                        (v4){1.0f, 1.0f, 0.0f, 1.0f}, 
+                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                        (v4){1.0f, 0.0f, 1.0f, 1.0f});
+
+                                    memcpy(VertexBufferMappedSubresource.pData, Vertices, sizeof(vertex)*VertexCount);
+                                    memcpy(IndexBufferMappedSubresource.pData, Indices, sizeof(u32)*IndexCount);
+                                }
+                                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)VertexBuffer, 0);
+                                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)IndexBuffer, 0);
+
+                                VertexCount = 0;
+                                IndexCount = 0;
+                            }
+
+                            // Update Constant Buffer
+                            {
+                                ConstantBufferData.ScreenWidth  = ScreenWidth;
+                                ConstantBufferData.ScreenHeight = ScreenHeight;
+                                ConstantBufferData.FrameCount = FrameCount++;
+                                DeviceContext->lpVtbl->UpdateSubresource(DeviceContext, (ID3D11Resource *)ConstantBuffer, 0, 0, &ConstantBufferData, 0, 0);
+                            }
+
+                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+                            float ClearColor[4] = {0.1f, 0.1f, 0.2f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
 
                             DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(Indices), 0, 0);
