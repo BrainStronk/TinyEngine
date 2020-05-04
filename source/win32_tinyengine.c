@@ -51,7 +51,7 @@ DEFINE_GUID(IID_IAudioRenderClient, 0xF294ACFC, 0x3146, 0x4483, 0xA7, 0xBF, 0xAD
 ////////////////////////////////////
 
 static void
-Win32PrintDebugString(char* Format, ...)
+Win32PrintDebugString(char *Format, ...)
 {
     static char Buffer[1024];
     va_list ArgumentList;
@@ -193,7 +193,7 @@ Win32InitD3D11(HWND Window)
     Flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    D3D_FEATURE_LEVEL SupportedFeatureLevels[3] = 
+    D3D_FEATURE_LEVEL SupportedFeatureLevels[3] = \
     {
         D3D_FEATURE_LEVEL_11_0,
         D3D_FEATURE_LEVEL_10_1,
@@ -1785,6 +1785,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         {
                             {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
                             {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0}, // TODO(hayden): Is 32 here correct..?
                         };
 
                         read_file_debug VertexShaderCode = Win32ReadFileDebug("vertex_shader.fxc");
@@ -1893,10 +1894,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Win32PrintDebugString("CreateBuffer(ConstantBuffer) Failed!\n");
                         }
 
-                        // NOTE(hayden): This stuff is experimental, it doesn't do anything right now
                         // Texture *********/
-                        UINT ImageWidth, ImageHeight;
-                        UINT ImageComponentsPerPixel;
+                        UINT ImageWidth = 0, ImageHeight = 0;
+                        UINT ImageComponentsPerPixel = 0;
+
                         void *Texels = 0; // ImageData
                         { // TODO(hayden): Probably pull this out into a function
                             LPCWSTR Filename = L"../source/friend.png";
@@ -1947,8 +1948,8 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         Texture2DDesc.CPUAccessFlags   = 0;
 
                         D3D11_SUBRESOURCE_DATA TextureData = {0};
-                        TextureData.pSysMem = Texels;
-                        TextureData.SysMemPitch = sizeof(Texels);
+                        TextureData.pSysMem = Texels; // This might be the wrong data for this -- should the coordinates go here instead?
+                        TextureData.SysMemPitch = ImageWidth*ImageComponentsPerPixel;
 
                         ID3D11Texture2D *Texture;
                         if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
@@ -1972,7 +1973,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
 
                         DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
-                        //DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+                        DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
 
                         DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &ConstantBuffer);
 
@@ -2031,8 +2032,10 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                             // Update Vertex/Index Buffer with new Rects
                             {
-                                D3D11_MAPPED_SUBRESOURCE VertexBufferMappedSubresource = {0};
-                                D3D11_MAPPED_SUBRESOURCE IndexBufferMappedSubresource  = {0};
+                                D3D11_MAPPED_SUBRESOURCE VertexBufferMappedSubresource  = {0};
+                                //D3D11_MAPPED_SUBRESOURCE TextureBufferMappedSubresource = {0};
+                                D3D11_MAPPED_SUBRESOURCE IndexBufferMappedSubresource   = {0};
+
                                 if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &VertexBufferMappedSubresource) != S_OK)
                                 {
                                     Win32PrintDebugString("Vertex Buffer Map Failed!\n");
@@ -2043,27 +2046,28 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 }
                                 {
                                     DrawRectangleColorful(100, 100, 100, 100, 
-                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
-                                                        (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
-                                                        (v4){0.0f, 0.0f, 1.0f, 1.0f}, 
-                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f});
+                                                         (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                         (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
+                                                         (v4){0.0f, 0.0f, 1.0f, 1.0f}, 
+                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f});
                                     DrawRectangleColorful(600, 600, 200, 200, 
-                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                        (v4){1.0f, 0.0f, 1.0f, 1.0f}, 
-                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                        (v4){1.0f, 1.0f, 1.0f, 1.0f});
+                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                         (v4){1.0f, 0.0f, 1.0f, 1.0f}, 
+                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                         (v4){1.0f, 1.0f, 1.0f, 1.0f});
                                     DrawRectangleColorful(850, 200, 50, 50, 
-                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
-                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                        (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
-                                                        (v4){0.0f, 0.0f, 1.0f, 1.0f});
+                                                         (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                         (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
+                                                         (v4){0.0f, 0.0f, 1.0f, 1.0f});
                                     DrawRectangleColorful(1000, 500, 159, 159, 
-                                                        (v4){1.0f, 1.0f, 0.0f, 1.0f}, 
-                                                        (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                        (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
-                                                        (v4){1.0f, 0.0f, 1.0f, 1.0f});
+                                                         (v4){1.0f, 1.0f, 0.0f, 1.0f}, 
+                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                         (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                         (v4){1.0f, 0.0f, 1.0f, 1.0f});
 
                                     memcpy(VertexBufferMappedSubresource.pData, Vertices, sizeof(vertex)*VertexCount);
+                                    //memcpy(TextureBufferMappedSubresource.pData, Vertices, sizeof(vertex)*VertexCount); // NOTE(hayden): Uses same coordinates as Verices for now
                                     memcpy(IndexBufferMappedSubresource.pData, Indices, sizeof(u32)*IndexCount);
                                 }
                                 DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)VertexBuffer, 0);

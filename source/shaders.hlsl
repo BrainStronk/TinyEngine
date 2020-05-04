@@ -2,6 +2,7 @@ struct vs_out
 {
     float4 Position : SV_POSITION;
     float4 Color : COLOR;
+    float2 TextureUV : TEXCOORD;
 };
 
 cbuffer constant_buffer
@@ -30,7 +31,7 @@ ConvertScreenspaceToViewspace(float4 Position : POSITION)
 }
 
 vs_out
-VS(float4 Position : POSITION, float4 Color : COLOR, uint VertexID : SV_VertexID)
+VS(float4 Position : POSITION, float4 Color : COLOR, float2 TextureUV : TEXCOORD, uint VertexID : SV_VertexID)
 {
     vs_out Output;
 
@@ -45,6 +46,7 @@ VS(float4 Position : POSITION, float4 Color : COLOR, uint VertexID : SV_VertexID
 
     Output.Position = Position;
     Output.Color = Color;
+    Output.TextureUV = TextureUV;
 
     return(Output);
 }
