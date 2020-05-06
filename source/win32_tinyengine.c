@@ -20,12 +20,6 @@
 #endif
 #include "stb_sprintf.h"
 
-#ifndef STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STBI_FAILURE_USERMSG
-#endif
-#include "stb_image.h"
-
 #include <math.h>
 
 #include "handmademath.h"
@@ -1386,6 +1380,12 @@ typedef struct v2i
     int Y;
 } v2i;
 
+typedef struct v2
+{
+    f32 X;
+    f32 Y;
+} v2;
+
 typedef struct v3
 {
     f32 X;
@@ -1661,14 +1661,26 @@ typedef struct vertex
 {
     v4 Position;
     v4 Color;
+    v2 TexCoord;
 } vertex;
 
+typedef struct tiny_png
+{
+    void *Texels;
+    u32 Width;
+    u32 Height;
+    u32 ComponentsPerPixel;
+} tiny_png;
+
 #define TOTAL_RECTANGLES 1000
-int VertexCount = 0;
-int IndexCount = 0;
+
+int VertexCount  = 0;
+int IndexCount   = 0;
+int TextureCount = 0;
 
 vertex Vertices[4 * TOTAL_RECTANGLES] = {0};
-u32 Indices[6 * TOTAL_RECTANGLES] = {0};
+u32 Indices[6 * TOTAL_RECTANGLES]     = {0};
+tiny_png Textures[TOTAL_RECTANGLES]   = {0};
 
 void
 DrawRectangle(int X, int Y, int W, int H, v4 Color)
@@ -1680,10 +1692,10 @@ DrawRectangle(int X, int Y, int W, int H, v4 Color)
     Indices[IndexCount+4] = VertexCount+2;
     Indices[IndexCount+5] = VertexCount+1;
 
-    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color};
-    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color};
-    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color};
-    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color, {0, 1}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color, {1, 1}};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color, {0, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color, {1, 0}};
 
     IndexCount += 6;
 }
@@ -1698,12 +1710,118 @@ DrawRectangleColorful(int X, int Y, int W, int H, v4 Color1, v4 Color2, v4 Color
     Indices[IndexCount+4] = VertexCount+2;
     Indices[IndexCount+5] = VertexCount+1;
 
-    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color1};
-    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color2};
-    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color3};
-    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color4};
+    IndexCount += 6;
+
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color1, {0, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color2, {0, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color3, {0, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color4, {0, 0}};
+
+    TextureCount += 1;
+}
+
+void
+DrawRectangleTextured(int X, int Y, int W, int H, tiny_png Texture)
+{
+    Indices[IndexCount+0] = VertexCount+0;
+    Indices[IndexCount+1] = VertexCount+1;
+    Indices[IndexCount+2] = VertexCount+2;
+    Indices[IndexCount+3] = VertexCount+3;
+    Indices[IndexCount+4] = VertexCount+2;
+    Indices[IndexCount+5] = VertexCount+1;
 
     IndexCount += 6;
+
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {0, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {1, 0}};
+    Vertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {0, 1}};
+    Vertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {1, 1}};
+
+    Textures[TextureCount++] = Texture;
+}
+
+tiny_png
+Win32LoadPNG(u16 *FilePath)
+{
+    tiny_png Result = {0};
+
+    LPCWSTR Filename = FilePath;
+
+    IWICImagingFactory *WICImagingFactory = 0;
+    if(CoCreateInstance(&CLSID_WICImagingFactory, 0, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, &WICImagingFactory) == 0)
+    {
+        IWICBitmapDecoder *Decoder = 0;
+        if(WICImagingFactory->lpVtbl->CreateDecoderFromFilename(WICImagingFactory, Filename, 0, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder) == 0)
+        {
+            IWICBitmapFrameDecode *Frame;
+            if(Decoder->lpVtbl->GetFrame(Decoder, 0, &Frame) == 0)
+            {
+                IWICBitmapSource *RGBAImageFrame = 0;
+                if(WICConvertBitmapSource(&GUID_WICPixelFormat32bppBGRA, (IWICBitmapSource *)Frame, &RGBAImageFrame) == 0)
+                {
+                    UINT TempWidth, TempHeight;
+                    if(RGBAImageFrame->lpVtbl->GetSize(RGBAImageFrame, &TempWidth, &TempHeight) == 0)
+                    {
+                        Result.Width = TempWidth;
+                        Result.Height = TempHeight;
+                        Result.ComponentsPerPixel = 4;
+
+                        Result.Texels = HeapAlloc(GetProcessHeap(), 0, Result.Width*Result.Height*Result.ComponentsPerPixel);
+                        if(Result.Texels)
+                        {
+                            if(RGBAImageFrame->lpVtbl->CopyPixels(RGBAImageFrame, 0, Result.Width*4, Result.Width*Result.Height*Result.ComponentsPerPixel, (BYTE *)Result.Texels) != 0)
+                            {
+                                HeapFree(GetProcessHeap(), 0, Result.Texels);
+                                __debugbreak();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return(Result);
+}
+
+tiny_png
+Win32CreateTexture(u16 *ImagePath)
+{
+    // Texture *********/
+    tiny_png Image = Win32LoadPNG(ImagePath);
+    
+    D3D11_TEXTURE2D_DESC Texture2DDesc = {0};
+    Texture2DDesc.Width            = Image.Width;
+    Texture2DDesc.Height           = Image.Height;
+    Texture2DDesc.MipLevels        = 1;
+    Texture2DDesc.ArraySize        = 1;
+    Texture2DDesc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+    Texture2DDesc.SampleDesc.Count = 1;
+    Texture2DDesc.Usage            = D3D11_USAGE_DEFAULT;
+    Texture2DDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+    Texture2DDesc.CPUAccessFlags   = 0;
+
+    D3D11_SUBRESOURCE_DATA TextureData = {0};
+    TextureData.pSysMem = Image.Texels;
+    TextureData.SysMemPitch = Image.Width*Image.ComponentsPerPixel;
+
+    ID3D11Texture2D *Texture;
+    if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
+    {
+        Win32PrintDebugString("CreateTextfure2D() Failed!\n");
+    }
+
+    ID3D11ShaderResourceView *TextureShaderResourceView;
+    if(Device->lpVtbl->CreateShaderResourceView(Device, (ID3D11Resource *)Texture, 0, &TextureShaderResourceView) != S_OK)
+    {
+        Win32PrintDebugString("CreateShaderResourceView() Failed!\n");
+    }
+
+    Texture->lpVtbl->Release(Texture);
+
+    DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+
+    return(Image);
 }
 
 int WINAPI
@@ -1785,7 +1903,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         {
                             {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
                             {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
-                            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0}, // TODO(hayden): Is 32 here correct..?
+                            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
                         };
 
                         read_file_debug VertexShaderCode = Win32ReadFileDebug("vertex_shader.fxc");
@@ -1856,7 +1974,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Win32PrintDebugString("CreateBuffer(VertexBuffer) Failed!\n");
                         }
 
-                        UINT Stride = 32; // sizeof(POSITION + COLOR)
+                        UINT Stride = sizeof(vertex); // sizeof(POSITION + COLOR + TEXCOORD)
                         UINT Offset = 0;
 
                         // Index Buffer *********/                        
@@ -1894,73 +2012,22 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             Win32PrintDebugString("CreateBuffer(ConstantBuffer) Failed!\n");
                         }
 
-                        // Texture *********/
-                        UINT ImageWidth = 0, ImageHeight = 0;
-                        UINT ImageComponentsPerPixel = 0;
+                        // Sampler *********/
+                        D3D11_SAMPLER_DESC SamplerDesc = {0};
+                        SamplerDesc.Filter         = D3D11_FILTER_MIN_MAG_MIP_POINT;
+                        SamplerDesc.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.MinLOD         = -3.402823466e+38F;
+                        SamplerDesc.MaxLOD         = 3.402823466e+38F;
+                        SamplerDesc.MipLODBias     = 0.0f;
+                        SamplerDesc.MaxAnisotropy  = 1;
+                        SamplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
-                        void *Texels = 0; // ImageData
-                        { // TODO(hayden): Probably pull this out into a function
-                            LPCWSTR Filename = L"../source/friend.png";
-                            IWICImagingFactory *WICImagingFactory = 0;
-	                        if(CoCreateInstance(&CLSID_WICImagingFactory, 0, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, &WICImagingFactory) == 0)
-                            {
-                                IWICBitmapDecoder *Decoder = 0;
-                                if(WICImagingFactory->lpVtbl->CreateDecoderFromFilename(WICImagingFactory, Filename, 0, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder) == 0)
-                                {
-                                    IWICBitmapFrameDecode *Frame;
-                                    if(Decoder->lpVtbl->GetFrame(Decoder, 0, &Frame) == 0)
-                                    {
-                                        IWICBitmapSource *RGBAImageFrame = 0;
-                                        if(WICConvertBitmapSource(&GUID_WICPixelFormat32bppBGRA, (IWICBitmapSource *)Frame, &RGBAImageFrame) == 0)
-                                        {
-                                            UINT TempWidth, TempHeight;
-                                            if(RGBAImageFrame->lpVtbl->GetSize(RGBAImageFrame, &TempWidth, &TempHeight) == 0)
-                                            {
-                                                ImageWidth = TempWidth;
-                                                ImageHeight = TempHeight;
-                                                ImageComponentsPerPixel = 4;
-
-                                                Texels = HeapAlloc(GetProcessHeap(), 0, ImageWidth*ImageHeight*ImageComponentsPerPixel);
-                                                if(Texels)
-                                                {
-                                                    if(RGBAImageFrame->lpVtbl->CopyPixels(RGBAImageFrame, 0, ImageWidth*4, ImageWidth*ImageHeight*ImageComponentsPerPixel, (BYTE *)Texels) != 0)
-                                                    {
-                                                        HeapFree(GetProcessHeap(), 0, Texels);
-                                                        __debugbreak();
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        D3D11_TEXTURE2D_DESC Texture2DDesc = {0};
-                        Texture2DDesc.Width            = 32;
-                        Texture2DDesc.Height           = 32;
-                        Texture2DDesc.MipLevels        = 1;
-                        Texture2DDesc.ArraySize        = 1;
-                        Texture2DDesc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
-                        Texture2DDesc.SampleDesc.Count = 1;
-                        Texture2DDesc.Usage            = D3D11_USAGE_DEFAULT;
-                        Texture2DDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
-                        Texture2DDesc.CPUAccessFlags   = 0;
-
-                        D3D11_SUBRESOURCE_DATA TextureData = {0};
-                        TextureData.pSysMem = Texels; // This might be the wrong data for this -- should the coordinates go here instead?
-                        TextureData.SysMemPitch = ImageWidth*ImageComponentsPerPixel;
-
-                        ID3D11Texture2D *Texture;
-                        if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
+                        ID3D11SamplerState *SamplerState = {0};
+                        if(Device->lpVtbl->CreateSamplerState(Device, &SamplerDesc, &SamplerState) != S_OK)
                         {
-                            Win32PrintDebugString("CreateTexture2D() Failed!\n");
-                        }
-
-                        ID3D11ShaderResourceView *TextureShaderResourceView;
-                        if(Device->lpVtbl->CreateShaderResourceView(Device, (ID3D11Resource *)Texture, 0, &TextureShaderResourceView) != S_OK)
-                        {
-                            Win32PrintDebugString("CreateShaderResourceView() Failed!\n");
+                            Win32PrintDebugString("CreateSamplerState() Failed!\n");
                         }
                         
                         // Set Stuff *********/
@@ -1973,9 +2040,11 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
 
                         DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
-                        DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+                        
 
                         DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &ConstantBuffer);
+
+                        DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &SamplerState);
 
                         DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
                         DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
@@ -2033,7 +2102,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                             // Update Vertex/Index Buffer with new Rects
                             {
                                 D3D11_MAPPED_SUBRESOURCE VertexBufferMappedSubresource  = {0};
-                                //D3D11_MAPPED_SUBRESOURCE TextureBufferMappedSubresource = {0};
                                 D3D11_MAPPED_SUBRESOURCE IndexBufferMappedSubresource   = {0};
 
                                 if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource *)VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &VertexBufferMappedSubresource) != S_OK)
@@ -2045,16 +2113,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                     Win32PrintDebugString("Index Buffer Map Failed!\n");
                                 }
                                 {
-                                    DrawRectangleColorful(100, 100, 100, 100, 
-                                                         (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
-                                                         (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
-                                                         (v4){0.0f, 0.0f, 1.0f, 1.0f}, 
-                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f});
-                                    DrawRectangleColorful(600, 600, 200, 200, 
-                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                         (v4){1.0f, 0.0f, 1.0f, 1.0f}, 
-                                                         (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
-                                                         (v4){1.0f, 1.0f, 1.0f, 1.0f});
+                                    //DrawRectangleTextured(100, 100, 100, 100, FriendPNG);
+                                    //DrawRectangleTextured(600, 600, 200, 200, FriendPNG);
+                                    
+                                    tiny_png Friend = Win32CreateTexture(L"../source/friend.png");
+                                    //tiny_png GreenFriend = Win32CreateTexture(L"../source/green_friend.png");
+
+                                    DrawRectangleTextured(600, 600, 200, 200, Friend);
+                                    //DrawRectangleTextured(200, 200, 32, 32, GreenFriend);
+
                                     DrawRectangleColorful(850, 200, 50, 50, 
                                                          (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
                                                          (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
@@ -2067,7 +2134,6 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                                          (v4){1.0f, 0.0f, 1.0f, 1.0f});
 
                                     memcpy(VertexBufferMappedSubresource.pData, Vertices, sizeof(vertex)*VertexCount);
-                                    //memcpy(TextureBufferMappedSubresource.pData, Vertices, sizeof(vertex)*VertexCount); // NOTE(hayden): Uses same coordinates as Verices for now
                                     memcpy(IndexBufferMappedSubresource.pData, Indices, sizeof(u32)*IndexCount);
                                 }
                                 DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource *)VertexBuffer, 0);
@@ -2075,6 +2141,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
 
                                 VertexCount = 0;
                                 IndexCount = 0;
+                                TextureCount = 0;
                             }
 
                             // Update Constant Buffer

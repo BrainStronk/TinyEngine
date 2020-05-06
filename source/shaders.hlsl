@@ -13,12 +13,6 @@ cbuffer constant_buffer
     int Padding;
 };
 
-float4
-PS(vs_out Input) : SV_TARGET
-{
-    return(Input.Color);
-}
-
 float4 
 ConvertScreenspaceToViewspace(float4 Position : POSITION)
 {
@@ -29,6 +23,9 @@ ConvertScreenspaceToViewspace(float4 Position : POSITION)
 
     return(Result);
 }
+
+Texture2D Texture;
+SamplerState PixelArtSampler;
 
 vs_out
 VS(float4 Position : POSITION, float4 Color : COLOR, float2 TextureUV : TEXCOORD, uint VertexID : SV_VertexID)
@@ -49,4 +46,11 @@ VS(float4 Position : POSITION, float4 Color : COLOR, float2 TextureUV : TEXCOORD
     Output.TextureUV = TextureUV;
 
     return(Output);
+}
+
+
+float4
+PS(vs_out Input) : SV_TARGET
+{
+    return(Texture.Sample(PixelArtSampler, Input.TextureUV));
 }
