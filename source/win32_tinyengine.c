@@ -1,5 +1,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <windowsx.h>
+#include <wincodec.h>
+#include <xinput.h>
+#include <combaseapi.h>
 
 #define CINTERFACE
 #define COBJMACROS
@@ -16,12 +20,19 @@
 #endif
 #include "stb_sprintf.h"
 
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "handmademath.h"
+
 #include "tinyengine_types.h"
 #include "tinyengine_platform.h"
 
-#include "tinyengine.c"
-
 static b32 IsRunning;
+static b32 D3DInitialized;
+static u32 ScreenWidth;
+static u32 ScreenHeight;
 static ID3D11Device *Device;
 static ID3D11DeviceContext *DeviceContext;
 static IDXGISwapChain *Swapchain;
@@ -36,7 +47,7 @@ DEFINE_GUID(IID_IAudioRenderClient, 0xF294ACFC, 0x3146, 0x4483, 0xA7, 0xBF, 0xAD
 ////////////////////////////////////
 
 static void
-Win32PrintDebugString(char* Format, ...)
+Win32PrintDebugString(char *Format, ...)
 {
     static char Buffer[1024];
     va_list ArgumentList;
@@ -45,6 +56,8 @@ Win32PrintDebugString(char* Format, ...)
     va_end(ArgumentList);
     OutputDebugStringA(Buffer);
 }
+
+#include "tinyengine.c"
 
 typedef struct win32_audio_thread_params
 {
@@ -117,13 +130,13 @@ Win32InitWASAPI()
     IMMDeviceEnumerator *DeviceEnumerator = 0;
     if(CoCreateInstance(&CLSID_MMDeviceEnumerator, 0, CLSCTX_ALL, &IID_IMMDeviceEnumerator, (void **)&DeviceEnumerator) == 0)
     {
-        IMMDevice *Device = 0;
-        if(DeviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(DeviceEnumerator, eRender, eConsole, &Device) == 0)
+        IMMDevice *IMMDevice = 0;
+        if(DeviceEnumerator->lpVtbl->GetDefaultAudioEndpoint(DeviceEnumerator, eRender, eConsole, &IMMDevice) == 0)
         {
             DeviceEnumerator->lpVtbl->Release(DeviceEnumerator);
 
             IAudioClient *AudioClient = 0;
-            if(Device->lpVtbl->Activate(Device, &IID_IAudioClient, CLSCTX_ALL, 0, (void **)&AudioClient) == 0)
+            if(IMMDevice->lpVtbl->Activate(IMMDevice, &IID_IAudioClient, CLSCTX_ALL, 0, (void **)&AudioClient) == 0)
             {
                 WAVEFORMATEX WaveFormat = {0};
                 WaveFormat.wFormatTag = WAVE_FORMAT_PCM;
@@ -172,11 +185,11 @@ Win32InitD3D11(HWND Window)
     b32 Result = false;
 
     UINT Flags = 0;
-#if TINYENGINE_DEBUG
+#if TINY_ENGINE_DEBUG
     Flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    D3D_FEATURE_LEVEL SupportedFeatureLevels[3] = 
+    D3D_FEATURE_LEVEL SupportedFeatureLevels[3] = \
     {
         D3D_FEATURE_LEVEL_11_0,
         D3D_FEATURE_LEVEL_10_1,
@@ -184,10 +197,10 @@ Win32InitD3D11(HWND Window)
     };
 
     // TODO(zak): Using the default adapter is not a great idea on systems with multiple gpus, handle this.
-    if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) !=  0)
+    if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_HARDWARE, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) != 0)
     {
         // TODO(zak): Log something saying we couldn't create the device with the hardware driver so now we will try the warp driver instead.
-        if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_WARP, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) !=  0)
+        if(D3D11CreateDevice(0, D3D_DRIVER_TYPE_WARP, 0, Flags, SupportedFeatureLevels, ArrayCount(SupportedFeatureLevels), D3D11_SDK_VERSION, &Device, &ActiveFeatureLevel, &DeviceContext) != 0)
         {
             // TODO(zak): Log error that we couldn't initialize d3d11 with the warp driver either
         }
@@ -222,45 +235,50 @@ Win32InitD3D11(HWND Window)
                         // TODO(zak): Logging we weren't able to query the monitorhz falling back to 60
                     }
 
-                    DXGI_SWAP_CHAIN_DESC SwapchainDescription = {0};
-                    SwapchainDescription.BufferDesc.Width = GetSystemMetrics(SM_CXSCREEN); // NOTE(zak): We will make the Swapchain's with and height the size of the monitor, so that we only need to resize the viewport and not the buffers when we get WM_SIZE
-                    SwapchainDescription.BufferDesc.Height = GetSystemMetrics(SM_CYSCREEN);
-                    SwapchainDescription.BufferDesc.RefreshRate.Numerator = MonitorHz;
-                    SwapchainDescription.BufferDesc.RefreshRate.Denominator = 1;
-                    SwapchainDescription.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; // BGRA Blts are faster than RGBA blts in d3d11 
-                    SwapchainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-                    SwapchainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-                    SwapchainDescription.SampleDesc.Count = 1; // NOTE(zak): If we ever want MSAA you turn it on here
-                    SwapchainDescription.SampleDesc.Quality = 0;
-                    SwapchainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-                    SwapchainDescription.BufferCount = 1; // NOTE(zak): When/If this Swapchain goes full screen the buffer count needs to be increased to two as it wont be able to use desktop as its front buffer.
-                    SwapchainDescription.OutputWindow = Window;
-                    SwapchainDescription.Windowed = 1;
-                    SwapchainDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // TODO(zak): On Win8/10 we should be using Flip model swapchains instead, these are not supported on Win7.
-                    SwapchainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH allows us to switch between a Windows and Fullscreen modes. 
-
-                    if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, (IUnknown*)Device, &SwapchainDescription, &Swapchain) == 0)
+                    RECT WindowRect = {0};
+                    if(GetWindowRect(Window, &WindowRect))
                     {
-                        DXGIFactory->lpVtbl->Release(DXGIFactory);
+                        DXGI_SWAP_CHAIN_DESC SwapchainDescription = {0};
+                        SwapchainDescription.BufferDesc.Width = (UINT)(WindowRect.right - WindowRect.left);
+                        SwapchainDescription.BufferDesc.Height = (UINT)(WindowRect.bottom - WindowRect.top);
+                        SwapchainDescription.BufferDesc.RefreshRate.Numerator = MonitorHz;
+                        SwapchainDescription.BufferDesc.RefreshRate.Denominator = 1;
+                        SwapchainDescription.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB; // BGRA Blts are faster than RGBA blts in d3d11 
+                        SwapchainDescription.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
+                        SwapchainDescription.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+                        SwapchainDescription.SampleDesc.Count = 1; // NOTE(zak): If we ever want MSAA you turn it on here
+                        SwapchainDescription.SampleDesc.Quality = 0;
+                        SwapchainDescription.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+                        SwapchainDescription.BufferCount = 1; // NOTE(zak): When/If this Swapchain goes full screen the buffer count needs to be increased to two as it wont be able to use desktop as its front buffer.
+                        SwapchainDescription.OutputWindow = Window;
+                        SwapchainDescription.Windowed = 1;
+                        SwapchainDescription.SwapEffect = DXGI_SWAP_EFFECT_DISCARD; // TODO(zak): On Win8/10 we should be using Flip model swapchains instead, these are not supported on Win7.
+                        SwapchainDescription.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH allows us to switch between a Windows and Fullscreen modes. 
 
-                        ID3D11Texture2D *Backbuffer = 0;
-                        if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void**)&Backbuffer) == 0)
+                        if(DXGIFactory->lpVtbl->CreateSwapChain(DXGIFactory, (IUnknown*)Device, &SwapchainDescription, &Swapchain) == 0)
                         {
-                            if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource*)Backbuffer, 0, &RenderTargetView) == 0)
-                            {
-                                Backbuffer->lpVtbl->Release(Backbuffer);
+                            DXGIFactory->lpVtbl->Release(DXGIFactory);
 
-                                RECT WindowRect = {0};
-                                if(GetWindowRect(Window, &WindowRect))
+                            ID3D11Texture2D *Backbuffer = 0;
+                            if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void **)&Backbuffer) == 0)
+                            {
+                                if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource *)Backbuffer, 0, &RenderTargetView) == 0)
                                 {
+                                    Backbuffer->lpVtbl->Release(Backbuffer);
+                                
+                                    ScreenWidth = SwapchainDescription.BufferDesc.Width;
+                                    ScreenHeight = SwapchainDescription.BufferDesc.Height;
+
                                     D3D11_VIEWPORT Viewport = {0};
-                                    Viewport.Width = WindowRect.right - WindowRect.bottom;
-                                    Viewport.Height = WindowRect.bottom - WindowRect.top;
+
+                                    Viewport.Width = (FLOAT)(WindowRect.right - WindowRect.left);
+                                    Viewport.Height = (FLOAT)(WindowRect.bottom - WindowRect.top);
                                     Viewport.MaxDepth = 1.0f;
 
                                     DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
 
                                     Result = true;
+                                    D3DInitialized = true;
                                 }
                                 else
                                 {
@@ -319,20 +337,21 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
         case WM_INPUT:
         {
-            UINT SizeOfBuffer = sizeof(RAWINPUT);
-            char Data[sizeof(RAWINPUT)] = {0};
+            UINT SizeOfBuffer;
+            GetRawInputData((HRAWINPUT)LParam, RID_INPUT, NULL, &SizeOfBuffer, sizeof(RAWINPUTHEADER));
+            HANDLE Heap = GetProcessHeap();
+            LPBYTE Data = (LPBYTE)HeapAlloc(Heap, 0, SizeOfBuffer);
+            
             if(GetRawInputData((HRAWINPUT)LParam, RID_INPUT, Data, &SizeOfBuffer, sizeof(RAWINPUTHEADER)) <= SizeOfBuffer)
             {
                 RAWINPUT *RawInput = (RAWINPUT *)Data;
 
+                tiny_event Event = {0};
                 if(RawInput->header.dwType == RIM_TYPEMOUSE)
                 {
                     // Mouse Buttons & Wheel
-                    tiny_event Event = {0};
                     Event.Type = TINY_EVENT_TYPE_MOUSE;
-                    Event.Mouse.Type = TINY_EVENT_MOUSE_CLICK;
-                    Event.Mouse.Button = false;
-                    Event.Mouse.IsDown = false;
+                    Event.Mouse.InputType = TINY_INPUT_TYPE_BUTTON; // NOTE(hayden): This isn't the case for wheel events
 
                     USHORT CurrentMouseButton = RawInput->data.mouse.usButtonFlags;
                     switch(CurrentMouseButton)
@@ -341,39 +360,40 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         case RI_MOUSE_LEFT_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_LEFT;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_LEFT_BUTTON_DOWN);
                         } break;
 
                         case RI_MOUSE_MIDDLE_BUTTON_UP:
                         case RI_MOUSE_MIDDLE_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_MIDDLE;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_MIDDLE_BUTTON_DOWN) >> 4;
                         } break;
 
                         case RI_MOUSE_RIGHT_BUTTON_UP:
                         case RI_MOUSE_RIGHT_BUTTON_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_RIGHT;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_RIGHT_BUTTON_DOWN) >> 2;
                         } break;
 
                         case RI_MOUSE_BUTTON_4_UP:
                         case RI_MOUSE_BUTTON_4_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA1;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_4_DOWN) >> 6;
                         } break;
 
                         case RI_MOUSE_BUTTON_5_UP:
                         case RI_MOUSE_BUTTON_5_DOWN:
                         {
                             Event.Mouse.Button = MOUSE_EXTRA2;
-                            Event.Mouse.IsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN);
+                            Event.Mouse.ButtonIsDown = (CurrentMouseButton & RI_MOUSE_BUTTON_5_DOWN) >> 8;
                         } break;
 
                         case RI_MOUSE_WHEEL:
                         {
+                            Event.Mouse.InputType = TINY_INPUT_TYPE_SCROLL_WHEEL;
                             Event.Mouse.WheelDelta = RawInput->data.mouse.usButtonData;
                         } break;
 
@@ -384,7 +404,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                     }
 
                     // TODO(hayden): Assert this?
-                    if(Event.Mouse.Button != false) // Don't push events we aren't choosing to handle
+                    if(Event.Mouse.Button || Event.Mouse.WheelDelta) // Don't push events we aren't choosing to handle
                     {
                         Tiny_PushInputEvent(Event);
                     }
@@ -557,63 +577,67 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
                         b32 IsDown = !(Flags & RI_KEY_BREAK);
 
-                        tiny_event Event = {0};
                         Event.Type = TINY_EVENT_TYPE_KEYBOARD;
-                        Event.Keyboard.IsDown = IsDown;
+                        Event.Keyboard.KeyIsDown = IsDown;
                         Event.Keyboard.KeyType = false;
 
                         // Assign VirtualKey to Engine's te_key_type enum
                         if((VirtualKey >= 'A') && (VirtualKey <= 'Z'))
                         {
-                            for(int VKIndex = 'A'; VKIndex <= 'Z'; ++VKIndex)
+                            for(u32 VKIndex = 'A'; VKIndex <= 'Z'; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = (VKIndex - 'A') + KEY_A;
+                                    break;
                                 }
                             }
                         }
                         else if((VirtualKey >= '0') && (VirtualKey <= '9'))
                         {
-                            for(int VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
+                            for(u32 VKIndex = '0'; VKIndex <= '9'; ++VKIndex)
                             {
                                 int Offset = KEY_0;
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - ('0' - Offset);
+                                    break;
                                 }
                             }
                         }
                         else if((VirtualKey >= VK_NUMPAD0) && (VirtualKey <= VK_DIVIDE))
                         {
                             int Offset = KEY_NUMPAD_0;
-                            for(int VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
+                            for(u32 VKIndex = VK_NUMPAD0; VKIndex <= VK_DIVIDE; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_NUMPAD0-Offset);
+                                    break;
                                 }
                             }
                         }
                         else if((VirtualKey >= VK_F1) && (VirtualKey <= VK_F24))
                         {
                             int Offset = KEY_F1;
-                            for(int VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
+                            for(u32 VKIndex = VK_F1; VKIndex <= VK_F24; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_F1-Offset);
+                                    break;
                                 }
                             }
                         }
                         else if((VirtualKey >= VK_LEFT) && (VirtualKey <= VK_DOWN))
                         {
                             int Offset = KEY_LEFT;
-                            for(int VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
+                            for(u32 VKIndex = VK_LEFT; VKIndex <= VK_DOWN; ++VKIndex)
                             {
                                 if(VKIndex == VirtualKey)
                                 {
                                     Event.Keyboard.KeyType = VKIndex - (VK_LEFT-Offset);
+                                    break;
                                 }
                             }
                         }
@@ -633,7 +657,7 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
 
                                 case VK_RETURN:
                                 {
-                                    Event.Keyboard.KeyType = KEY_RETURN;
+                                    Event.Keyboard.KeyType = KEY_ENTER;
                                 } break;
 
                                 case VK_LSHIFT:
@@ -1046,6 +1070,10 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
                         //GetKeyNameTextW((LONG)Key, Buffer, 512);
                     }
                 }
+                else if(RawInput->header.dwType == RIM_TYPEHID)
+                {
+                    // TODO(hayden): Controller/Joystick stuff!
+                }
             }
         } break;
 
@@ -1054,19 +1082,58 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
             // Cursor
             tiny_event Event = {0};
             Event.Type = TINY_EVENT_TYPE_MOUSE;
-            Event.Mouse.Type = TINY_EVENT_MOUSE_MOVE;
-            Event.Mouse.X = LParam & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
-            Event.Mouse.Y = (LParam >> 16) & 0xFFFF; // TODO(hayden): There is a macro for this in <windowsx.h>
+            Event.Mouse.InputType = TINY_INPUT_TYPE_MOVE;
+
+            Event.Mouse.X = GET_X_LPARAM(LParam);
+            Event.Mouse.Y = GET_Y_LPARAM(LParam);
 
             // Normalized
             // TODO(hayden): Pull this out into the engine code!
             // TODO(hayden): Also, this isn't "centered" (where it's (0,0) at the center of the screen)
-            RECT ClientRect;
-            GetClientRect(Window, &ClientRect);
-            Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
-            Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
+            //RECT ClientRect;
+            //GetClientRect(Window, &ClientRect);
+            //Event.Mouse.NormalizedX = (f32)Event.Mouse.X / (f32)(ClientRect.right-1);
+            //Event.Mouse.NormalizedY = (f32)Event.Mouse.Y / (f32)(ClientRect.bottom-1);
 
             Tiny_PushInputEvent(Event);
+        } break;
+        
+        case WM_SIZE:
+        {
+            int Width = LOWORD(LParam);
+            int Height = HIWORD(LParam);
+
+            ScreenWidth = Width;
+            ScreenHeight = Height;
+
+            if(D3DInitialized)
+            {
+                DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 0, 0, 0);
+                RenderTargetView->lpVtbl->Release(RenderTargetView);
+                
+                if(Swapchain->lpVtbl->ResizeBuffers(Swapchain, 0, Width, Height, DXGI_FORMAT_UNKNOWN, 0) == S_OK)
+                {                    
+                    ID3D11Texture2D *BackBuffer;
+                    if(Swapchain->lpVtbl->GetBuffer(Swapchain, 0, &IID_ID3D11Texture2D, (void **)&BackBuffer) == S_OK)
+                    {            
+                        D3D11_RENDER_TARGET_VIEW_DESC RenderTargetViewDescription = {0};
+                        RenderTargetViewDescription.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+                        RenderTargetViewDescription.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+                        
+                        if(Device->lpVtbl->CreateRenderTargetView(Device, (ID3D11Resource *)BackBuffer, &RenderTargetViewDescription, &RenderTargetView) == S_OK)
+                        {
+                            BackBuffer->lpVtbl->Release(BackBuffer);
+                            
+                            D3D11_VIEWPORT Viewport = {0};
+                            Viewport.Width = (FLOAT)Width;
+                            Viewport.Height = (FLOAT)Height;
+                            Viewport.MaxDepth = 1.0f;
+                            
+                            DeviceContext->lpVtbl->RSSetViewports(DeviceContext, 1, &Viewport);
+                        }
+                    }
+                }                
+            }
         } break;
 
         default:
@@ -1076,6 +1143,756 @@ Win32MainWindowCallback(HWND Window, UINT Message, WPARAM WParam, LPARAM LParam)
     }
 
     return(Result);
+}
+
+inline void
+Win32PushValidXInputButtonEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum Button, int XInputButtonMask)
+{
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
+
+    TinyController->ButtonIsDown = (ControllerState.wButtons & XInputButtonMask) ? true : false; // Get rid of flag so it's just 1 or 0
+
+    if(TinyController->ButtonIsDown) 
+    {
+        TinyController->Button = Button;
+        if(Button >= CONTROLLER_BUTTON_UP && Button <= CONTROLLER_BUTTON_BACK)
+        {
+            // All Digital Buttons
+            TinyController->InputType = TINY_INPUT_TYPE_BUTTON;
+        }
+#if 0
+        else if(Button == CONTROLLER_THUMBSTICK_LEFT)
+        {
+            Controller->InputType = TINY_INPUT_TYPE_THUMBSTICK;
+            Controller->X = ControllerState.sThumbLX;
+            Controller->Y = ControllerState.sThumbLY;
+        }
+        else if(Button == CONTROLLER_THUMBSTICK_RIGHT)
+        {
+            Controller->InputType = TINY_INPUT_TYPE_THUMBSTICK;
+            Controller->X = ControllerState.sThumbRX;
+            Controller->Y = ControllerState.sThumbRY;
+        }
+        else if(Button == CONTROLLER_SHOULDER_LEFT)
+        {
+            Controller->InputType = TINY_INPUT_TYPE_SHOULDER;
+            Controller->Trigger = ControllerState.bLeftTrigger;
+        }
+        else if(Button == CONTROLLER_SHOULDER_RIGHT)
+        {
+            Controller->InputType = TINY_INPUT_TYPE_SHOULDER;
+            Controller->Trigger = ControllerState.bRightTrigger;
+        }
+#endif
+
+        // TODO(hayden): Should this happen here, or should it happen outside of this function for clarity?
+        Tiny_PushInputEvent(Event);
+    }
+}
+
+inline void
+Win32PushValidXInputTriggerEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum EnumType)
+{
+    static u8 LastLeft;
+    static u8 LastRight;
+
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
+    TinyController->InputType = TINY_INPUT_TYPE_TRIGGER;
+    TinyController->Button = EnumType;
+
+    if(EnumType == CONTROLLER_TRIGGER_LEFT)
+    {
+        if(ControllerState.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+        {
+            TinyController->Trigger = ControllerState.bLeftTrigger; 
+        }
+        else 
+        {
+            TinyController->Trigger = 0;
+        }
+    }
+    else if(EnumType == CONTROLLER_TRIGGER_RIGHT)
+    {
+        if(ControllerState.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD)
+        {
+            TinyController->Trigger = ControllerState.bRightTrigger; 
+        }
+        else 
+        {
+            TinyController->Trigger = 0;
+        }
+    }
+
+    if(EnumType == CONTROLLER_TRIGGER_LEFT && (ControllerState.bLeftTrigger != LastLeft))
+    {
+        LastLeft = ControllerState.bLeftTrigger;
+        Tiny_PushInputEvent(Event);
+    }
+    else if(EnumType == CONTROLLER_TRIGGER_RIGHT && (ControllerState.bRightTrigger != LastRight))
+    {
+        LastRight = ControllerState.bRightTrigger;
+        Tiny_PushInputEvent(Event);
+    }
+}
+
+inline void
+Win32FillXInputControllerThumbstickValues(tiny_event_controller *TinyController, SHORT XInputThumbX, SHORT XInputThumbY, int Deadzone)
+{
+    TinyController->ActualX = XInputThumbX;
+    TinyController->ActualY = XInputThumbY;
+
+    if(TinyController->ActualX < -32767) { TinyController->ActualX = -32767; }
+    if(TinyController->ActualY < -32767) { TinyController->ActualY = -32767; }
+
+    TinyController->Magnitude = (u32)sqrt(TinyController->ActualX*TinyController->ActualX + TinyController->ActualY*TinyController->ActualY);
+    TinyController->ActualXNormalized = (f32)TinyController->ActualX / (f32)TinyController->Magnitude;
+    TinyController->ActualYNormalized = (f32)TinyController->ActualY / (f32)TinyController->Magnitude;
+
+    TinyController->DeadzonedX = (TinyController->ActualX > Deadzone) ? (TinyController->ActualX - Deadzone) : 0;
+    TinyController->DeadzonedX = (TinyController->ActualX < Deadzone) ? (TinyController->ActualX + Deadzone) : TinyController->DeadzonedX;
+    TinyController->DeadzonedY = (TinyController->ActualY > Deadzone) ? (TinyController->ActualY - Deadzone) : 0;
+    TinyController->DeadzonedY = (TinyController->ActualY < Deadzone) ? (TinyController->ActualY + Deadzone) : TinyController->DeadzonedY;
+
+    if(TinyController->Magnitude > (u32)Deadzone)
+    {
+        if(TinyController->Magnitude > 32767) { TinyController->Magnitude = 32767; }
+
+        TinyController->Magnitude -= Deadzone;
+        TinyController->MagnitudeNormalized = (f32)TinyController->Magnitude / (32767 - Deadzone);
+
+        TinyController->DeadzonedXNormalized = (f32)TinyController->DeadzonedX / (f32)TinyController->Magnitude;
+        TinyController->DeadzonedYNormalized = (f32)TinyController->DeadzonedY / (f32)TinyController->Magnitude;
+    }
+    else
+    {
+        TinyController->Magnitude = 0;
+        TinyController->DeadzonedX = 0;
+        TinyController->DeadzonedY = 0;
+        TinyController->MagnitudeNormalized = 0.0f;
+        TinyController->DeadzonedXNormalized = 0.0f;
+        TinyController->DeadzonedYNormalized = 0.0f;
+    }
+}
+
+inline void
+Win32PushValidXInputThumbstickEvents(int ControllerNumber, XINPUT_GAMEPAD ControllerState, tiny_controller_enum EnumType)
+{
+    // Only push changed values
+    static int LastLeftX;
+    static int LastLeftY;
+    static int LastRightX;
+    static int LastRightY;
+
+    tiny_event Event = {0};
+    Event.Type = TINY_EVENT_TYPE_CONTROLLER;
+
+    tiny_event_controller *TinyController = &Event.Controller;
+    TinyController->Number = (u8)ControllerNumber;
+    TinyController->InputType = TINY_INPUT_TYPE_THUMBSTICK;
+    TinyController->Button = EnumType;
+
+    if(EnumType == CONTROLLER_THUMBSTICK_LEFT)
+    {
+        Win32FillXInputControllerThumbstickValues(TinyController, ControllerState.sThumbLX, ControllerState.sThumbLY, XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
+    }
+    else if(EnumType == CONTROLLER_THUMBSTICK_RIGHT)
+    {
+        Win32FillXInputControllerThumbstickValues(TinyController, ControllerState.sThumbRX, ControllerState.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
+    }
+
+    if(EnumType == CONTROLLER_THUMBSTICK_LEFT && (TinyController->ActualX != LastLeftX || TinyController->ActualY != LastLeftY))
+    {
+        LastLeftX = TinyController->ActualX;
+        LastLeftY = TinyController->ActualY;
+        Tiny_PushInputEvent(Event);
+    }
+    else if(EnumType == CONTROLLER_THUMBSTICK_RIGHT && (TinyController->ActualX != LastRightX || TinyController->ActualX != LastRightX))
+    {
+        LastRightX = TinyController->ActualX;
+        LastRightY = TinyController->ActualY;
+        Tiny_PushInputEvent(Event);
+    }
+}
+
+typedef struct read_file_debug
+{
+    void *Contents;
+    u32 FileSize;
+} read_file_debug;
+
+read_file_debug
+Win32ReadFileDebug(char *Filename)
+{
+    read_file_debug Result = {0};   
+
+    HANDLE FileHandle = CreateFileA(Filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0);
+    if(FileHandle != INVALID_HANDLE_VALUE)
+    {
+        LARGE_INTEGER FileSize;
+        if(GetFileSizeEx(FileHandle, &FileSize))
+        {
+            Assert(FileSize.QuadPart <= 0xFFFFFFFF);
+            u32 FileSize32 = (u32)FileSize.QuadPart;
+            Result.Contents = VirtualAlloc(0, FileSize32, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+            if(Result.Contents)
+            {
+                DWORD BytesRead;
+                if(ReadFile(FileHandle, Result.Contents, FileSize32, &BytesRead, 0) && (FileSize32 == BytesRead))
+                {
+                    Result.FileSize = FileSize32;
+                }
+                else
+                {                    
+                    // TODO(hayden): Logging
+                    VirtualFree(Result.Contents, 0, MEM_RELEASE);
+                    Result.Contents = 0;
+                }
+            }
+            else
+            {
+                // TODO(hayden): Logging
+            }
+        }
+        else
+        {
+            // TODO(hayden): Logging
+        }
+
+        CloseHandle(FileHandle);
+    }
+    else
+    {
+        // TODO(hayden): Logging
+    }
+
+    return(Result);
+}
+
+typedef struct v2i
+{
+    int X;
+    int Y;
+} v2i;
+
+typedef struct v2
+{
+    f32 X;
+    f32 Y;
+} v2;
+
+typedef struct v3
+{
+    f32 X;
+    f32 Y;
+    f32 Z;
+} v3;
+
+typedef struct v4
+{
+    f32 X;
+    f32 Y;
+    f32 Z;
+    f32 W;
+} v4;
+
+typedef struct m4x4
+{
+    /* NOTE: Row-major!
+    ** Ax, Ay, Az, Aw,
+    ** Bx, By, Bz, Bw,
+    ** Cx, Cy, Cz, Cw,
+    ** Dx, Dy, Dz, Dw,
+    */
+
+    f32 E[4][4];
+} m4x4;
+
+m4x4
+TinyMath_MatrixIdentity(void)
+{
+    m4x4 Result = \
+    {
+        {
+            {1, 0, 0, 0},
+            {0, 1, 0, 0},
+            {0, 0, 1, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixScale(v3 S)
+{
+    m4x4 Result = \
+    {
+        {
+            {S.X, 0,   0,   0},
+            {0,   S.Y, 0,   0},
+            {0,   0,   S.Z, 0},
+            {0,   0,   0,   1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateX(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            {1, 0, 0, 0},
+            {0, C,-S, 0},
+            {0, S, C, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateY(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            { C, 0, S, 0},
+            { 0, 1, 0, 0},
+            {-S, 0, C, 0},
+            { 0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixRotateZ(f32 Angle)
+{
+    float C = cosf(Angle);
+    float S = sinf(Angle);
+
+    m4x4 Result = \
+    {
+        {
+            {C,-S, 0, 0},
+            {S, C, 0, 0},
+            {0, 0, 1, 0},
+            {0, 0, 0, 1},
+        }
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MatrixTranslate(v3 T)
+{
+    m4x4 Result = \
+    {
+        {
+            {1,   0,   0, T.X},
+            {0,   1,   0, T.Y},
+            {0,   0,   1, T.Z},
+            {0,   0,   0,   1},
+        }
+    };
+    
+    return(Result);
+}
+
+v4
+TinyMath_MultiplyM4x4ByV4(m4x4 M, v4 V)
+{
+    v4 Result = \
+    {
+        .X = {M.E[0][0]*V.X + M.E[0][1]*V.Y + M.E[0][2]*V.Z + M.E[0][3]*V.W},
+        .Y = {M.E[1][0]*V.X + M.E[1][1]*V.Y + M.E[1][2]*V.Z + M.E[1][3]*V.W},
+        .Z = {M.E[2][0]*V.X + M.E[2][1]*V.Y + M.E[2][2]*V.Z + M.E[2][3]*V.W},
+        .W = {M.E[3][0]*V.X + M.E[3][1]*V.Y + M.E[3][2]*V.Z + M.E[3][3]*V.W},
+    };
+
+    return(Result);
+}
+
+m4x4
+TinyMath_MultiplyM4x4(m4x4 Left, m4x4 Right)
+{
+    m4x4 Result = {0};
+
+    for(int Row = 0; Row < 4; ++Row)
+    {
+        for(int Column = 0; Column < 4; ++Column)
+        {
+            for(int Current = 0; Current < 4; ++Current)
+            {
+                Result.E[Row][Column] += Left.E[Row][Current] * Right.E[Current][Column];
+            }
+        }
+    }
+
+    return(Result);
+}
+
+f32
+TinyMath_MagnitudeV3(v3 V)
+{
+    f32 Result = sqrtf(V.X*V.X + V.Y*V.Y + V.Z*V.Z);
+    return(Result);
+}
+
+v3
+TinyMath_DivideV3(v3 V, f32 N)
+{
+    v3 Result = V;
+
+    Result.X /= N;
+    Result.Y /= N;
+    Result.Z /= N;
+
+    return(Result);
+}
+
+v3
+TinyMath_NormalizeV3(v3 V)
+{
+    v3 Result = V;
+
+    f32 Magnitude = TinyMath_MagnitudeV3(Result);
+
+    Result = TinyMath_DivideV3(Result, Magnitude);
+
+    return(Result);
+}
+
+v3
+TinyMath_SubtractV3(v3 Left, v3 Right)
+{
+    v3 Result;
+
+    Result.X = Left.X - Right.X;
+    Result.Y = Left.Y - Right.Y;
+    Result.Z = Left.Z - Right.Z;
+
+    return(Result);
+}
+
+v3
+TinyMath_Cross(v3 Left, v3 Right)
+{
+    v3 Result;
+
+    Result.X = Left.Y*Right.Z - Left.Z*Right.Y;
+    Result.Y = Left.Z*Right.X - Left.X*Right.Z;
+    Result.Z = Left.X*Right.Y - Left.Y*Right.X;
+
+    return(Result);
+}
+
+f32
+TinyMath_DotV3(v3 Left, v3 Right)
+{
+    f32 Result = Left.X*Right.X + Left.Y*Right.Y + Left.Z*Right.Z;
+    return(Result);
+}
+
+m4x4
+TinyMath_LookAt(v3 EyePosition, v3 FocusPosition, v3 UpDirection)
+{
+    v3 AimDirectionZ = TinyMath_NormalizeV3(TinyMath_SubtractV3(FocusPosition, EyePosition));
+    v3 LocalCameraX = TinyMath_NormalizeV3(TinyMath_Cross(UpDirection, AimDirectionZ));
+    v3 LocalCameraY = TinyMath_Cross(AimDirectionZ, LocalCameraX);
+
+    v3 X = LocalCameraX;
+    v3 Y = LocalCameraY;
+    v3 Z = AimDirectionZ;
+
+    m4x4 Result;
+
+    Result.E[0][0] = X.X;
+    Result.E[0][1] = X.Y;
+    Result.E[0][2] = X.Z;
+    Result.E[0][3] = TinyMath_DotV3(EyePosition, X);
+
+    Result.E[1][0] = Y.X;
+    Result.E[1][1] = Y.Y;
+    Result.E[1][2] = Y.Z;
+    Result.E[1][3] = TinyMath_DotV3(EyePosition, Y);
+
+    Result.E[2][0] = Z.X;
+    Result.E[2][1] = Z.Y;
+    Result.E[2][2] = Z.Z;
+    Result.E[2][3] = TinyMath_DotV3(EyePosition, Z);
+
+    Result.E[3][0] = 0;
+    Result.E[3][1] = 0;
+    Result.E[3][2] = 0;
+    Result.E[3][3] = 1;
+
+    return(Result);
+}
+
+typedef struct constant_buffer
+{
+    int ScreenWidth;
+    int ScreenHeight;
+    int FrameCount;
+    int Padding;
+} constant_buffer;
+
+typedef struct vertex
+{
+    v4 Position;
+    v4 Color;
+    v2 TexCoord;
+} vertex;
+
+typedef struct tiny_png
+{
+    void *Texels;
+    u32 Width;
+    u32 Height;
+    u32 ComponentsPerPixel;
+} tiny_png;
+
+typedef struct texture_info
+{
+    u32 X;
+    u32 Y;
+    u32 Width;
+    u32 Height;
+    u8* Filename;
+} texture_info;
+
+#define TOTAL_RECTANGLES 1000
+
+int VertexCount  = 0;
+int IndexCount   = 0;
+int TextureCount = 0;
+
+// TODO(hayden): TextureInfo and the rest should be the same (relative) size
+vertex HLSLVertices[4 * TOTAL_RECTANGLES] = {0};
+u32 HLSLIndices[6 * TOTAL_RECTANGLES]     = {0};
+texture_info HLSLTextures[8192]           = {0};
+
+void
+DrawRectangle(int X, int Y, int W, int H, v4 Color)
+{
+    HLSLIndices[IndexCount+0] = VertexCount+0;
+    HLSLIndices[IndexCount+1] = VertexCount+1;
+    HLSLIndices[IndexCount+2] = VertexCount+2;
+    HLSLIndices[IndexCount+3] = VertexCount+3;
+    HLSLIndices[IndexCount+4] = VertexCount+2;
+    HLSLIndices[IndexCount+5] = VertexCount+1;
+
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color, {0, 1}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color, {1, 1}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color, {0, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color, {1, 0}};
+
+    IndexCount += 6;
+}
+
+void
+DrawRectangleColorful(int X, int Y, int W, int H, v4 Color1, v4 Color2, v4 Color3, v4 Color4)
+{
+    HLSLIndices[IndexCount+0] = VertexCount+0;
+    HLSLIndices[IndexCount+1] = VertexCount+1;
+    HLSLIndices[IndexCount+2] = VertexCount+2;
+    HLSLIndices[IndexCount+3] = VertexCount+3;
+    HLSLIndices[IndexCount+4] = VertexCount+2;
+    HLSLIndices[IndexCount+5] = VertexCount+1;
+
+    IndexCount += 6;
+
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color1, {0, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y+H/2, 1.0f, 1.0f,}, Color2, {0, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X-W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color3, {0, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)X+W/2, (f32)Y-H/2, 1.0f, 1.0f,}, Color4, {0, 0}};
+
+    TextureCount += 1;
+}
+
+void
+DrawRectangleTextured(texture_info Texture)
+{
+    HLSLIndices[IndexCount+0] = VertexCount+0;
+    HLSLIndices[IndexCount+1] = VertexCount+1;
+    HLSLIndices[IndexCount+2] = VertexCount+2;
+    HLSLIndices[IndexCount+3] = VertexCount+3;
+    HLSLIndices[IndexCount+4] = VertexCount+2;
+    HLSLIndices[IndexCount+5] = VertexCount+1;
+
+    IndexCount += 6;
+
+    HLSLVertices[VertexCount++] = (vertex){{(f32)Texture.X-Texture.Width/2, (f32)Texture.Y+Texture.Height/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {0, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)Texture.X+Texture.Width/2, (f32)Texture.Y+Texture.Height/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {1, 0}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)Texture.X-Texture.Width/2, (f32)Texture.Y-Texture.Height/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {0, 1}};
+    HLSLVertices[VertexCount++] = (vertex){{(f32)Texture.X+Texture.Width/2, (f32)Texture.Y-Texture.Height/2, 1.0f, 1.0f,}, (v4){1.0f, 1.0f, 1.0f, 1.0f}, {1, 1}};
+
+    ++TextureCount;
+}
+
+tiny_png
+Win32LoadPNG(u16 *FilePath)
+{
+    tiny_png Result = {0};
+
+    LPCWSTR Filename = FilePath;
+
+    IWICImagingFactory *WICImagingFactory = 0;
+    if(CoCreateInstance(&CLSID_WICImagingFactory, 0, CLSCTX_INPROC_SERVER, &IID_IWICImagingFactory, &WICImagingFactory) == 0)
+    {
+        IWICBitmapDecoder *Decoder = 0;
+        if(WICImagingFactory->lpVtbl->CreateDecoderFromFilename(WICImagingFactory, Filename, 0, GENERIC_READ, WICDecodeMetadataCacheOnDemand, &Decoder) == 0)
+        {
+            IWICBitmapFrameDecode *Frame;
+            if(Decoder->lpVtbl->GetFrame(Decoder, 0, &Frame) == 0)
+            {
+                IWICBitmapSource *RGBAImageFrame = 0;
+                if(WICConvertBitmapSource(&GUID_WICPixelFormat32bppBGRA, (IWICBitmapSource *)Frame, &RGBAImageFrame) == 0)
+                {
+                    UINT TempWidth, TempHeight;
+                    if(RGBAImageFrame->lpVtbl->GetSize(RGBAImageFrame, &TempWidth, &TempHeight) == 0)
+                    {
+                        Result.Width = TempWidth;
+                        Result.Height = TempHeight;
+                        Result.ComponentsPerPixel = 4;
+
+                        Result.Texels = HeapAlloc(GetProcessHeap(), 0, Result.Width*Result.Height*Result.ComponentsPerPixel);
+                        if(Result.Texels)
+                        {
+                            if(RGBAImageFrame->lpVtbl->CopyPixels(RGBAImageFrame, 0, Result.Width*4, Result.Width*Result.Height*Result.ComponentsPerPixel, (BYTE *)Result.Texels) != 0)
+                            {
+                                HeapFree(GetProcessHeap(), 0, Result.Texels);
+                                __debugbreak();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    return(Result);
+}
+
+tiny_png
+Win32CreateTexture(u16* ImagePath)
+{
+    // Texture *********/
+    tiny_png Image = Win32LoadPNG(ImagePath);
+    
+    D3D11_TEXTURE2D_DESC Texture2DDesc = {0};
+    Texture2DDesc.Width            = Image.Width;
+    Texture2DDesc.Height           = Image.Height;
+    Texture2DDesc.MipLevels        = 1;
+    Texture2DDesc.ArraySize        = 1;
+    Texture2DDesc.Format           = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
+    Texture2DDesc.SampleDesc.Count = 1;
+    Texture2DDesc.Usage            = D3D11_USAGE_DEFAULT;
+    Texture2DDesc.BindFlags        = D3D11_BIND_SHADER_RESOURCE;
+    Texture2DDesc.CPUAccessFlags   = 0;
+
+    D3D11_SUBRESOURCE_DATA TextureData = {0};
+    TextureData.pSysMem = Image.Texels;
+    TextureData.SysMemPitch = Image.Width*Image.ComponentsPerPixel;
+
+    ID3D11Texture2D* Texture;
+    if(Device->lpVtbl->CreateTexture2D(Device, &Texture2DDesc, &TextureData, &Texture) != S_OK)
+    {
+        Win32PrintDebugString("CreateTextfure2D() Failed!\n");
+    }
+
+    ID3D11ShaderResourceView* TextureShaderResourceView;
+    if(Device->lpVtbl->CreateShaderResourceView(Device, (ID3D11Resource*)Texture, 0, &TextureShaderResourceView) != S_OK)
+    {
+        Win32PrintDebugString("CreateShaderResourceView() Failed!\n");
+    }
+
+    Texture->lpVtbl->Release(Texture);
+
+    DeviceContext->lpVtbl->PSSetShaderResources(DeviceContext, 0, 1, &TextureShaderResourceView);
+
+    return(Image);
+}
+
+u32
+Win32ReadTextureInfoDebugGetValue(u8** TextureDataContents)
+{
+    u32 Result = 0;
+
+    int Index = 0;
+    u8 TempString[_MAX_PATH] = {0};
+
+    while(**TextureDataContents == '\n')
+    {
+        *TextureDataContents += 1;
+    }
+
+    while(**TextureDataContents != '\n')
+    {
+        TempString[Index++] = **TextureDataContents;
+        *TextureDataContents += 1;
+    }
+
+    Result = atoi((char*)TempString);
+
+    return(Result);
+}
+
+void
+Win32ReadTextureInfoDebug(texture_info* TextureInfo, read_file_debug TextureData)
+{
+    u8* TextureDataContents = TextureData.Contents;
+    u32 TextureIndex = 0;
+
+    while(*TextureDataContents != 0xFF)
+    {
+        TextureInfo[TextureIndex].Filename = (u8*)malloc(_MAX_PATH);
+        u8* FilenamePointer = TextureInfo[TextureIndex].Filename;
+
+        while(*TextureDataContents == '\n')
+        {
+            ++TextureDataContents;
+        }
+
+        while(*TextureDataContents != '\n')
+        {
+            *FilenamePointer++ = *TextureDataContents++;
+        }
+
+        TextureInfo[TextureIndex].X = Win32ReadTextureInfoDebugGetValue(&TextureDataContents);
+        TextureInfo[TextureIndex].Y = Win32ReadTextureInfoDebugGetValue(&TextureDataContents);
+        TextureInfo[TextureIndex].Width  = Win32ReadTextureInfoDebugGetValue(&TextureDataContents);
+        TextureInfo[TextureIndex].Height = Win32ReadTextureInfoDebugGetValue(&TextureDataContents);
+
+        while(*TextureDataContents == '\n')
+        {
+            ++TextureDataContents;
+        }
+
+        ++TextureIndex;
+    }
 }
 
 int WINAPI
@@ -1089,13 +1906,15 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
     WindowClass.hIcon = LoadIcon(NULL, IDI_WINLOGO);
     WindowClass.lpszClassName = L"Win32TinyEngineWindowClass"; // NOTE(zak): At somepoint the window class should reflect the applications name
 
+    u32 FrameCount = 0;
+
     if(RegisterClassW(&WindowClass))
     {
         HWND Window = CreateWindowExW(0, WindowClass.lpszClassName, L"TinyEngine", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT, 0, 0, Instance, 0);  // NOTE(zak): At somepoint the window name should reflect the applications name
         if(Window != INVALID_HANDLE_VALUE)
         {
-            // Input
-            RAWINPUTDEVICE RawInputDevices[2]; // TODO(hayden): Joystick
+            // RawInput
+            RAWINPUTDEVICE RawInputDevices[4]; // TODO(hayden): Joystick
             { 
                 // Mouse
                 RawInputDevices[0].usUsagePage = 0x01;
@@ -1108,7 +1927,28 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 RawInputDevices[1].usUsage = 0x06;
                 RawInputDevices[1].dwFlags = RIDEV_NOLEGACY;
                 RawInputDevices[1].hwndTarget = Window;
+
+                // TODO(hayden): Joystick
+                RawInputDevices[2].usUsagePage = 0x01;
+                RawInputDevices[2].usUsage = 0x04;
+                RawInputDevices[2].dwFlags = 0;
+                RawInputDevices[2].hwndTarget = Window;
+
+                // TODO(hayden): Gamepad
+                RawInputDevices[3].usUsagePage = 0x01;
+                RawInputDevices[3].usUsage = 0x05;
+                RawInputDevices[3].dwFlags = 0;
+                RawInputDevices[3].hwndTarget = Window;
             }
+
+            // Read packed image contents
+            read_file_debug PackedTextureImageFile = Win32ReadFileDebug("../source/packed_image_locations.txt");
+            char CurrentPackedTextureFileString[_MAX_PATH+1] = {0}; // NOTE(hayden): +1 for \n char
+            char* CurrentPackedTextureFileStringPointer = &CurrentPackedTextureFileString[0];
+
+            char* PackedTextureImageFileContents = PackedTextureImageFile.Contents;
+            Win32ReadTextureInfoDebug(HLSLTextures, PackedTextureImageFile);
+            // TODO(hayden): ^ Use this info with the textures!
 
             if(RegisterRawInputDevices(RawInputDevices, ArrayCount(RawInputDevices), sizeof(RAWINPUTDEVICE)))
             {
@@ -1134,11 +1974,184 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                         }
                     }
 
+                    // D3D11
+                //  {
+                        // TODO(hayden): Hot path for debug shader reloading
+
+                        // Input Assembler *********/
+                        D3D11_INPUT_ELEMENT_DESC ElementDesc[] = \
+                        {
+                            {"POSITION", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                            {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                            {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 32, D3D11_INPUT_PER_VERTEX_DATA, 0},
+                        };
+
+                        read_file_debug VertexShaderCode = Win32ReadFileDebug("vertex_shader.fxc");
+                        ID3D11InputLayout *InputLayout;
+                        if(Device->lpVtbl->CreateInputLayout(Device, ElementDesc, ArrayCount(ElementDesc), VertexShaderCode.Contents, VertexShaderCode.FileSize, &InputLayout) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateInputLayout() Failed!\n");
+                        }
+
+                        // Vertex Shader *********/
+                        ID3D11VertexShader *VertexShader;
+                        if(Device->lpVtbl->CreateVertexShader(Device, VertexShaderCode.Contents, VertexShaderCode.FileSize, 0, &VertexShader) != S_OK) 
+                        {
+                            Win32PrintDebugString("CreateVertexShader() Failed!\n");
+                        }
+
+                        // Pixel Shader *********/
+                        read_file_debug PixelShaderCode = Win32ReadFileDebug("pixel_shader.fxc");
+                        ID3D11PixelShader *PixelShader;
+                        if(Device->lpVtbl->CreatePixelShader(Device, PixelShaderCode.Contents, PixelShaderCode.FileSize, 0, &PixelShader) != S_OK)
+                        {
+                            Win32PrintDebugString("CreatePixelShader() Failed!\n");
+                        }
+
+                        // Rasterizer *********/
+                        // Sampler *********/
+                        // Blend State *********/
+                        // Constant Buffer *********/
+
+                        //m4x4 ScaleMatrix = TinyMath_MatrixScale((v3){1, 1, 1});
+                        //m4x4 RotationMatrixX = TinyMath_MatrixRotateX(1.25f);
+                        //m4x4 RotationMatrixY = TinyMath_MatrixRotateY(.5f);
+                        //m4x4 RotationMatrixZ = TinyMath_MatrixRotateZ(0);
+                        //m4x4 TranslationMatrix = TinyMath_MatrixTranslate((v3){0, 0, 0});
+
+                        //m4x4 TransformMatrix;
+                        //TransformMatrix = TinyMath_MultiplyM4x4(RotationMatrixZ, ScaleMatrix);
+                        //TransformMatrix = TinyMath_MultiplyM4x4(TranslationMatrix, TransformMatrix);
+
+                        //v4 V1 = {0.0f,  0.0f,  1.0f, 1.0f};
+                        //v4 V2 = {0.0f,  50.0f, 1.0f, 1.0f};
+                        //v4 V3 = {50.0f, 50.0f, 1.0f, 1.0f};
+                        //v4 V4 = {50.0f, 0.0f,  1.0f, 1.0f};
+
+                        //v3 CameraEye = {10, 10, 10};
+                        //v3 CameraFocus = {0, 0, 0};
+                        //v3 CameraUp = {0, 1, 0};
+                        //TransformMatrix = TinyMath_MultiplyM4x4(TransformMatrix, TinyMath_LookAt(CameraEye, CameraFocus, CameraUp));
+
+                        //V1 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V1);
+                        //V2 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V2);
+                        //V3 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V3);
+                        //V4 = TinyMath_MultiplyM4x4ByV4(TransformMatrix, V4);
+
+                        // Vertex Buffer *********/
+                        D3D11_BUFFER_DESC VertexBufferDesc = {0};
+                        VertexBufferDesc.ByteWidth      = sizeof(HLSLVertices);
+                        VertexBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+                        VertexBufferDesc.BindFlags      = D3D11_BIND_VERTEX_BUFFER;
+                        VertexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+                        D3D11_SUBRESOURCE_DATA VertexBufferSubresourceData = {0};
+                        VertexBufferSubresourceData.pSysMem = HLSLVertices;
+
+                        ID3D11Buffer* VertexBuffer = 0;
+                        if(Device->lpVtbl->CreateBuffer(Device, &VertexBufferDesc, &VertexBufferSubresourceData, &VertexBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateBuffer(VertexBuffer) Failed!\n");
+                        }
+
+                        UINT Stride = sizeof(vertex); // sizeof(POSITION + COLOR + TEXCOORD)
+                        UINT Offset = 0;
+
+                        // Index Buffer *********/                        
+                        D3D11_BUFFER_DESC IndexBufferDesc = {0};
+                        IndexBufferDesc.ByteWidth      = sizeof(HLSLIndices);
+                        IndexBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+                        IndexBufferDesc.BindFlags      = D3D11_BIND_INDEX_BUFFER;
+                        IndexBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+                        D3D11_SUBRESOURCE_DATA IndexBufferSubresourceData = {0};
+                        IndexBufferSubresourceData.pSysMem = HLSLIndices;
+
+                        ID3D11Buffer* IndexBuffer = 0;
+                        if(Device->lpVtbl->CreateBuffer(Device, &IndexBufferDesc, &IndexBufferSubresourceData, &IndexBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateBuffer(IndexBuffer) Failed!\n");
+                        }
+
+                        // Texture Buffer *********/
+                        D3D11_BUFFER_DESC TextureBufferDesc = {0};
+                        TextureBufferDesc.ByteWidth = sizeof(HLSLTextures);
+                        TextureBufferDesc.Usage          = D3D11_USAGE_DYNAMIC;
+                        TextureBufferDesc.BindFlags      = D3D11_BIND_INDEX_BUFFER;
+                        TextureBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+                        D3D11_SUBRESOURCE_DATA TextureBufferSubresourceData = {0};
+                        TextureBufferSubresourceData.pSysMem = HLSLTextures;
+
+                        ID3D11Buffer* TextureBuffer = 0;
+                        if(Device->lpVtbl->CreateBuffer(Device, &TextureBufferDesc, &TextureBufferSubresourceData, &TextureBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateBuffer(TextureBuffer) Failed!\n");
+                        }
+
+                        // Constant Buffer *********/
+                        constant_buffer ConstantBufferData;
+                        ConstantBufferData.ScreenWidth  = ScreenWidth;
+                        ConstantBufferData.ScreenHeight = ScreenHeight;
+
+                        D3D11_BUFFER_DESC ConstantBufferDesc = {0};
+                        ConstantBufferDesc.ByteWidth = sizeof(constant_buffer);
+                        ConstantBufferDesc.Usage     = D3D11_USAGE_DEFAULT;
+                        ConstantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+
+                        D3D11_SUBRESOURCE_DATA ConstantBufferSubresourceData = {0};
+                        ConstantBufferSubresourceData.pSysMem = &ConstantBufferData;
+
+                        ID3D11Buffer* ConstantBuffer = 0;
+                        if(Device->lpVtbl->CreateBuffer(Device, &ConstantBufferDesc, &ConstantBufferSubresourceData, &ConstantBuffer) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateBuffer(ConstantBuffer) Failed!\n");
+                        }
+
+                        // Sampler *********/
+                        D3D11_SAMPLER_DESC SamplerDesc = {0};
+                        SamplerDesc.Filter         = D3D11_FILTER_MIN_MAG_MIP_POINT;
+                        SamplerDesc.AddressU       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.AddressV       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.AddressW       = D3D11_TEXTURE_ADDRESS_CLAMP;
+                        SamplerDesc.MinLOD         = -3.402823466e+38F;
+                        SamplerDesc.MaxLOD         = 3.402823466e+38F;
+                        SamplerDesc.MipLODBias     = 0.0f;
+                        SamplerDesc.MaxAnisotropy  = 1;
+                        SamplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
+                        ID3D11SamplerState *SamplerState = {0};
+                        if(Device->lpVtbl->CreateSamplerState(Device, &SamplerDesc, &SamplerState) != S_OK)
+                        {
+                            Win32PrintDebugString("CreateSamplerState() Failed!\n");
+                        }
+                        
+                        // Set Stuff *********/
+                        // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see
+                        DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+
+                        DeviceContext->lpVtbl->IASetPrimitiveTopology(DeviceContext, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+                        DeviceContext->lpVtbl->IASetInputLayout(DeviceContext, InputLayout);
+
+                        DeviceContext->lpVtbl->VSSetShader(DeviceContext, VertexShader, 0, 0);
+
+                        DeviceContext->lpVtbl->PSSetShader(DeviceContext, PixelShader, 0, 0);
+
+                        DeviceContext->lpVtbl->VSSetConstantBuffers(DeviceContext, 0, 1, &ConstantBuffer);
+
+                        DeviceContext->lpVtbl->PSSetSamplers(DeviceContext, 0, 1, &SamplerState);
+
+                        DeviceContext->lpVtbl->IASetVertexBuffers(DeviceContext, 0, 1, &VertexBuffer, &Stride, &Offset);
+                        DeviceContext->lpVtbl->IASetIndexBuffer(DeviceContext, IndexBuffer, DXGI_FORMAT_R32_UINT, 0);
+                //  }
+
                     if(ShowWindow(Window, SW_SHOW) == 0)
                     {
                         IsRunning = true;
                         while(IsRunning)
                         {
+                            GlobalPlatform.EventQueueSize = 0;
+
                             MSG Message;
                             while(PeekMessageW(&Message, Window, 0, 0, PM_REMOVE))
                             {
@@ -1146,13 +2159,112 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                                 DispatchMessageW(&Message);
                             }
 
-                            // TODO(zak): I dont remember if we need to OMSetRenderTargets every frame. Lets see 
-                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+                            // XInput
+                            for(DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex)
+                            {
+                                XINPUT_STATE ControllerState = {0};
+                                if(XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+                                {
+                                    // Connected
+                                    XINPUT_GAMEPAD Gamepad = ControllerState.Gamepad;
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_UP,           XINPUT_GAMEPAD_DPAD_UP);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_DOWN,         XINPUT_GAMEPAD_DPAD_DOWN);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_LEFT,         XINPUT_GAMEPAD_DPAD_LEFT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_RIGHT,        XINPUT_GAMEPAD_DPAD_RIGHT);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_A,            XINPUT_GAMEPAD_A);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_B,            XINPUT_GAMEPAD_B);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_X,            XINPUT_GAMEPAD_X);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_Y,            XINPUT_GAMEPAD_Y);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_START,        XINPUT_GAMEPAD_START);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BACK,         XINPUT_GAMEPAD_BACK);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_THUMB_LEFT,   XINPUT_GAMEPAD_LEFT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_THUMB_RIGHT,  XINPUT_GAMEPAD_RIGHT_THUMB);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BUMPER_LEFT,  XINPUT_GAMEPAD_LEFT_SHOULDER);
+                                    Win32PushValidXInputButtonEvents(ControllerIndex,     Gamepad, CONTROLLER_BUTTON_BUMPER_RIGHT, XINPUT_GAMEPAD_RIGHT_SHOULDER);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex,    Gamepad, CONTROLLER_TRIGGER_LEFT);
+                                    Win32PushValidXInputTriggerEvents(ControllerIndex,    Gamepad, CONTROLLER_TRIGGER_RIGHT);
+                                    Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_LEFT);
+                                    Win32PushValidXInputThumbstickEvents(ControllerIndex, Gamepad, CONTROLLER_THUMBSTICK_RIGHT);
+                                }   
+                                else
+                                {
+                                    // Not connected
+                                }
+                            }
 
-                            float ClearColor[4] = {1.0f, 0.0f, 0.0f, 1.0f};
+                            Tiny_Update(&GlobalPlatform);
+
+                            // Update Vertex/Index Buffer with new Rects
+                            {
+                                D3D11_MAPPED_SUBRESOURCE VertexBufferMappedSubresource  = {0};
+                                D3D11_MAPPED_SUBRESOURCE IndexBufferMappedSubresource   = {0};
+                                D3D11_MAPPED_SUBRESOURCE TextureBufferMappedSubresource = {0};
+
+                                if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource*)VertexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &VertexBufferMappedSubresource) != S_OK)
+                                {
+                                    Win32PrintDebugString("Vertex Buffer Map Failed!\n");
+                                }
+                                if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource*)IndexBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &IndexBufferMappedSubresource) != S_OK)
+                                {
+                                    Win32PrintDebugString("Index Buffer Map Failed!\n");
+                                }
+                                if(DeviceContext->lpVtbl->Map(DeviceContext, (ID3D11Resource*)TextureBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &TextureBufferMappedSubresource) != S_OK)
+                                {
+                                    Win32PrintDebugString("Texture Buffer Map Failed!\n");
+                                }
+                                {
+                                    {
+                                        //DrawRectangleTextured(100, 100, 100, 100, FriendPNG);
+                                        //DrawRectangleTextured(600, 600, 200, 200, FriendPNG);
+                                        
+                                        //tiny_png Friend = Win32CreateTexture(L"../source/friend.png");
+                                        //tiny_png GreenFriend = Win32CreateTexture(L"../source/green_friend.png");
+                                        Win32CreateTexture(L"packed_image.png");
+
+                                        DrawRectangleTextured(HLSLTextures[0]);
+                                        //DrawRectangleTextured(200, 200, 32, 32, GreenFriend);
+
+                                        /*
+                                        DrawRectangleColorful(850, 200, 50, 50, 
+                                                            (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                            (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                            (v4){1.0f, 0.0f, 0.0f, 1.0f}, 
+                                                            (v4){0.0f, 0.0f, 1.0f, 1.0f});
+                                        DrawRectangleColorful(1000, 500, 159, 159, 
+                                                            (v4){1.0f, 1.0f, 0.0f, 1.0f}, 
+                                                            (v4){0.0f, 1.0f, 1.0f, 1.0f}, 
+                                                            (v4){0.0f, 1.0f, 0.0f, 1.0f}, 
+                                                            (v4){1.0f, 0.0f, 1.0f, 1.0f});
+                                        */
+
+                                        memcpy(VertexBufferMappedSubresource.pData, HLSLVertices, sizeof(vertex)*VertexCount);
+                                        memcpy(IndexBufferMappedSubresource.pData, HLSLIndices, sizeof(u32)*IndexCount);
+                                        memcpy(TextureBufferMappedSubresource.pData, HLSLTextures, sizeof(texture_info)*TextureCount);
+                                    }
+                                }
+                                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource*)VertexBuffer, 0);
+                                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource*)IndexBuffer, 0);
+                                DeviceContext->lpVtbl->Unmap(DeviceContext, (ID3D11Resource*)TextureBuffer, 0);
+
+                                VertexCount = 0;
+                                IndexCount = 0;
+                                TextureCount = 0;
+                            }
+
+                            // Update Constant Buffer
+                            {
+                                ConstantBufferData.ScreenWidth  = ScreenWidth;
+                                ConstantBufferData.ScreenHeight = ScreenHeight;
+                                ConstantBufferData.FrameCount = FrameCount++;
+                                DeviceContext->lpVtbl->UpdateSubresource(DeviceContext, (ID3D11Resource*)ConstantBuffer, 0, 0, &ConstantBufferData, 0, 0);
+                            }
+
+                            DeviceContext->lpVtbl->OMSetRenderTargets(DeviceContext, 1, &RenderTargetView, 0);
+                            float ClearColor[4] = {0.1f, 0.1f, 0.2f, 1.0f};
                             DeviceContext->lpVtbl->ClearRenderTargetView(DeviceContext, RenderTargetView, ClearColor);
-                            
-                            Tiny_Update(&Global_Platform);
+
+                            DeviceContext->lpVtbl->DrawIndexed(DeviceContext, ArrayCount(HLSLIndices), 0, 0);
+
                             Tiny_Render();
 
                             Swapchain->lpVtbl->Present(Swapchain, 1, 0); // VSync is on! Change the `1` to a `0` to turn it off
@@ -1170,7 +2282,7 @@ WinMain(HINSTANCE Instance, HINSTANCE PrevInstance, LPSTR CommandLine, int ShowC
                 }
                 else
                 {
-                    // TODO(zak): Loggings
+                    // TODO(zak): Logging
                 }
             }
             else
