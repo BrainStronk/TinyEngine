@@ -16,7 +16,7 @@ typedef int64_t s64;
 typedef int32_t b32;
 
 typedef float f32;
-typedef float f64;
+typedef double f64;
 
 #if !__cplusplus
 #define false 0

@@ -1,13 +1,30 @@
 #ifndef TINYENGINE_PLATFORM_H
 #define TINYENGINE_PLATFORM_H
 
-typedef enum tiny_event_type
-{
-    TINY_EVENT_TYPE_KEYBOARD = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
-    TINY_EVENT_TYPE_MOUSE,  
-} tiny_event_type;
+// E V E N T /////////////////////////////////////////////////////////////////////
 
-typedef enum tiny_event_mouse_button
+typedef enum tiny_event_input_type
+{
+    TINY_INPUT_TYPE_BUTTON = 1,
+    TINY_INPUT_TYPE_SCROLL_WHEEL,
+    TINY_INPUT_TYPE_MOVE,
+    TINY_INPUT_TYPE_THUMBSTICK,
+    TINY_INPUT_TYPE_TRIGGER,
+} tiny_event_input_type;
+
+// B U T T O N S /////////////////////////////////////////////////////////////////
+
+typedef struct tiny_digital_button
+{
+    b32 Pressed;
+    b32 Released;
+    b32 Up;
+    b32 Down;
+} tiny_digital_button;
+
+// M O U S E /////////////////////////////////////////////////////////////////////
+
+typedef enum tiny_mouse_enum
 {
     MOUSE_LEFT = 1,
     MOUSE_MIDDLE,
@@ -16,10 +33,107 @@ typedef enum tiny_event_mouse_button
     MOUSE_EXTRA2,
 
     MOUSE_COUNT,
-} tiny_event_mouse_button;
+} tiny_mouse_enum;
+
+typedef struct tiny_event_mouse
+{
+    tiny_event_input_type InputType;
+    u32 X, Y;
+    f32 XNormalized, YNormalized;
+    tiny_mouse_enum Button;
+    b32 ButtonIsDown;
+    s32 WheelDelta;
+} tiny_event_mouse;
+
+typedef struct tiny_mouse
+{
+    tiny_digital_button Left;
+    tiny_digital_button Middle;
+    tiny_digital_button Right;
+    tiny_digital_button Extra1;
+    tiny_digital_button Extra2;
+    u32 X, Y;
+    f32 XNormalized, YNormalized;
+    s32 WheelDelta;
+} tiny_mouse;
+
+// C O N T R O L L E R ///////////////////////////////////////////////////////////
+
+typedef enum tiny_controller_enum
+{
+    CONTROLLER_BUTTON_UP = 1,
+    CONTROLLER_BUTTON_DOWN,
+    CONTROLLER_BUTTON_LEFT,
+    CONTROLLER_BUTTON_RIGHT,
+    CONTROLLER_BUTTON_A,
+    CONTROLLER_BUTTON_B,
+    CONTROLLER_BUTTON_X,
+    CONTROLLER_BUTTON_Y,
+    CONTROLLER_BUTTON_START,
+    CONTROLLER_BUTTON_BACK,
+    CONTROLLER_BUTTON_THUMB_LEFT,
+    CONTROLLER_BUTTON_THUMB_RIGHT,
+    CONTROLLER_BUTTON_BUMPER_LEFT,
+    CONTROLLER_BUTTON_BUMPER_RIGHT,
+
+    CONTROLLER_TRIGGER_LEFT,
+    CONTROLLER_TRIGGER_RIGHT,
+
+    CONTROLLER_THUMBSTICK_LEFT,
+    CONTROLLER_THUMBSTICK_RIGHT,
+
+    CONTROLLER_COUNT,
+} tiny_controller_enum;
+
+typedef struct tiny_event_controller
+{
+    tiny_event_input_type InputType;
+    tiny_controller_enum Button;
+    b32 ButtonIsDown;
+    s32 ActualX, ActualY;
+    s32 DeadzonedX, DeadzonedY;
+    f32 ActualXNormalized, ActualYNormalized;
+    f32 DeadzonedXNormalized, DeadzonedYNormalized;
+    u32 Magnitude;
+    f32 MagnitudeNormalized;
+    u8 Trigger;
+    u8 Number;
+} tiny_event_controller;
+
+typedef struct tiny_controller
+{
+    tiny_digital_button Up;
+    tiny_digital_button Down;
+    tiny_digital_button Left;
+    tiny_digital_button Right;
+    tiny_digital_button A;
+    tiny_digital_button B;
+    tiny_digital_button X;
+    tiny_digital_button Y;
+    tiny_digital_button Start;
+    tiny_digital_button Back;
+    tiny_digital_button ThumbButtonLeft;
+    tiny_digital_button ThumbButtonRight;
+    tiny_digital_button BumperLeft;
+    tiny_digital_button BumperRight;
+    
+    s32 StickLeftX, StickLeftY;
+    s32 StickRightX, StickRightY;
+    f32 StickLeftXNormalized, StickLeftYNormalized;
+    f32 StickRightXNormalized, StickRightYNormalized;
+
+    u32 MagnitudeLeft, MagnitudeRight;
+    f32 MagnitudeLeftNormalized, MagnitudeRightNormalized;
+
+    u8 TriggerLeft;
+    u8 TriggerRight;
+    u8 ControllerNumber;
+} tiny_controller;
+
+// K E Y B O A R D ///////////////////////////////////////////////////////////////
 
 // NOTE(hayden): The order here matters for calculations from KEY_0 to KEY_DOWN
-typedef enum tiny_event_key_type
+typedef enum tiny_keyboard_enum
 {
     KEY_A = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
     KEY_B,
@@ -108,7 +222,7 @@ typedef enum tiny_event_key_type
 
     KEY_BACKSPACE,
     KEY_TAB,
-    KEY_RETURN,
+    KEY_ENTER,
     KEY_SPACE,
     KEY_LSHIFT,
     KEY_RSHIFT,
@@ -119,6 +233,7 @@ typedef enum tiny_event_key_type
     KEY_LSUPER, // Windows Key
     KEY_RSUPER, // Windows Key
     KEY_CAPSLOCK,
+    // TODO(hayden): KEY_SHIFT, KEY_CONTROL, KEY_ALT, KEY_SUPER
 
     KEY_ESCAPE,
     KEY_PAGEUP,
@@ -144,10 +259,10 @@ typedef enum tiny_event_key_type
     KEY_OEM_3 = KEY_GRAVE,
     KEY_LBRACKET,
     KEY_OEM_4 = KEY_LBRACKET,
-    KEY_RBRACKET,
-    KEY_OEM_6 = KEY_RBRACKET,
     KEY_BACKSLASH,
     KEY_OEM_5 = KEY_BACKSLASH,
+    KEY_RBRACKET,
+    KEY_OEM_6 = KEY_RBRACKET,
     KEY_QUOTE,
     KEY_OEM_7 = KEY_QUOTE,
     KEY_OEM_8,
@@ -215,30 +330,219 @@ typedef enum tiny_event_key_type
     KEY_PA1,
 
     KEY_COUNT,
-} tiny_event_key_type;
+} tiny_keyboard_enum;
 
 typedef struct tiny_event_keyboard
 {
-    tiny_event_key_type KeyType;
-    b32 IsDown;
+    tiny_keyboard_enum KeyType;
+    b32 KeyIsDown;
 } tiny_event_keyboard;
 
-// TODO(hayden): Preface with TINY_EVENT or not?
-typedef enum tiny_event_mouse_event_type
+typedef struct tiny_keyboard
 {
-    TINY_EVENT_MOUSE_MOVE = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
-    TINY_EVENT_MOUSE_CLICK,
-} tiny_event_mouse_event_type;
+    tiny_digital_button A;
+    tiny_digital_button B;
+    tiny_digital_button C;
+    tiny_digital_button D;
+    tiny_digital_button E;
+    tiny_digital_button F;
+    tiny_digital_button G;
+    tiny_digital_button H;
+    tiny_digital_button I;
+    tiny_digital_button J;
+    tiny_digital_button K;
+    tiny_digital_button L;
+    tiny_digital_button M;
+    tiny_digital_button N;
+    tiny_digital_button O;
+    tiny_digital_button P;
+    tiny_digital_button Q;
+    tiny_digital_button R;
+    tiny_digital_button S;
+    tiny_digital_button T;
+    tiny_digital_button U;
+    tiny_digital_button V;
+    tiny_digital_button W;
+    tiny_digital_button X;
+    tiny_digital_button Y;
+    tiny_digital_button Z;
 
-typedef struct tiny_event_mouse
+    tiny_digital_button Number0;
+    tiny_digital_button Number1;
+    tiny_digital_button Number2;
+    tiny_digital_button Number3;
+    tiny_digital_button Number4;
+    tiny_digital_button Number5;
+    tiny_digital_button Number6;
+    tiny_digital_button Number7;
+    tiny_digital_button Number8;
+    tiny_digital_button Number9;
+
+    tiny_digital_button Numpad0;
+    tiny_digital_button Numpad1;
+    tiny_digital_button Numpad2;
+    tiny_digital_button Numpad3;
+    tiny_digital_button Numpad4;
+    tiny_digital_button Numpad5;
+    tiny_digital_button Numpad6;
+    tiny_digital_button Numpad7;
+    tiny_digital_button Numpad8;
+    tiny_digital_button Numpad9;
+    tiny_digital_button NumpadMultiply;
+    tiny_digital_button NumpadAdd;
+    tiny_digital_button NumpadSeparator;
+    tiny_digital_button NumpadSubtract;
+    tiny_digital_button NumpadDecimal;
+    tiny_digital_button NumpadDivide;
+
+    tiny_digital_button F1;
+    tiny_digital_button F2;
+    tiny_digital_button F3;
+    tiny_digital_button F4;
+    tiny_digital_button F5;
+    tiny_digital_button F6;
+    tiny_digital_button F7;
+    tiny_digital_button F8;
+    tiny_digital_button F9;
+    tiny_digital_button F10;
+    tiny_digital_button F11;
+    tiny_digital_button F12;
+    tiny_digital_button F13;
+    tiny_digital_button F14;
+    tiny_digital_button F15;
+    tiny_digital_button F16;
+    tiny_digital_button F17;
+    tiny_digital_button F18;
+    tiny_digital_button F19;
+    tiny_digital_button F20;
+    tiny_digital_button F21;
+    tiny_digital_button F22;
+    tiny_digital_button F23;
+    tiny_digital_button F24;
+
+    tiny_digital_button Left;
+    tiny_digital_button Up;
+    tiny_digital_button Right;
+    tiny_digital_button Down;
+
+    tiny_digital_button Backspace;
+    tiny_digital_button Tab;
+    tiny_digital_button Enter;
+    tiny_digital_button Space;
+    tiny_digital_button LeftShift;
+    tiny_digital_button RightShift;
+    tiny_digital_button LeftControl;
+    tiny_digital_button RightControl;
+    tiny_digital_button LeftAlt;
+    tiny_digital_button RightAlt;
+    tiny_digital_button LeftSuper; // Windows Key
+    tiny_digital_button RightSuper; // Windows Key
+    tiny_digital_button CapsLock;
+
+    tiny_digital_button Escape;
+    tiny_digital_button PageUp;
+    tiny_digital_button PageDown;
+    tiny_digital_button Home;
+    tiny_digital_button End;
+    tiny_digital_button Insert;
+    tiny_digital_button Delete;
+    tiny_digital_button Pause;
+    tiny_digital_button NumLock;
+    tiny_digital_button ScrollLock;
+    tiny_digital_button PrintScreen;
+
+    // TODO(hayden): Non-US/manufacturer-specific handling
+    tiny_digital_button Plus;
+    tiny_digital_button Comma;
+    tiny_digital_button Minus;
+    tiny_digital_button Semicolon;
+    tiny_digital_button OEM1;
+    tiny_digital_button Slash;
+    tiny_digital_button OEM2;
+    tiny_digital_button Grave;
+    tiny_digital_button OEM_3;
+    tiny_digital_button LeftBracket;
+    tiny_digital_button OEM4;
+    tiny_digital_button Backslash;
+    tiny_digital_button OEM5;
+    tiny_digital_button RightBracket;
+    tiny_digital_button OEM6;
+    tiny_digital_button Quote;
+    tiny_digital_button OEM7;
+    tiny_digital_button OEM8;
+    tiny_digital_button OEM102;
+    tiny_digital_button OEMSpecific1;
+    tiny_digital_button OEMSpecific2;
+    tiny_digital_button OEMSpecific3;
+    tiny_digital_button OEMClear;
+
+    // TODO(hayden): Most of these values are untested
+    tiny_digital_button BrowserBack;
+    tiny_digital_button BrowserForward;
+    tiny_digital_button BrowserRefresh;
+    tiny_digital_button BrowserStop;
+    tiny_digital_button BrowserSearch;
+    tiny_digital_button BrowserFavorites;
+    tiny_digital_button BrowserHome;
+
+    tiny_digital_button VolumeMute;
+    tiny_digital_button VolumeUp;
+    tiny_digital_button VolumeDown;
+
+    tiny_digital_button MediaNextTrack;
+    tiny_digital_button MediaPrevTrack;
+    tiny_digital_button MediaStop;
+    tiny_digital_button MediaPlayPause;
+
+    tiny_digital_button LaunchMail;
+    tiny_digital_button LaunchMediaSelect;
+    tiny_digital_button LaunchApplication1;
+    tiny_digital_button LaunchApplication2;
+
+    tiny_digital_button Help;
+    tiny_digital_button Menu;
+    tiny_digital_button Print;
+    tiny_digital_button Select;
+    tiny_digital_button Execute;
+    tiny_digital_button Applications;
+    tiny_digital_button Sleep;
+
+    // TODO(hayden): Where are VK_IME_* defined???
+    tiny_digital_button IMEOn;
+    tiny_digital_button IMEOff;
+    tiny_digital_button IMEModeChange;
+    tiny_digital_button IMEConvert;
+    tiny_digital_button IMENonConvert;
+    tiny_digital_button IMEAccept;
+    tiny_digital_button IMEProcess;
+
+    tiny_digital_button ModeKana;
+    tiny_digital_button ModeHangeul;
+    tiny_digital_button ModeHangul;
+    tiny_digital_button ModeJunja;
+    tiny_digital_button ModeFinal;
+    tiny_digital_button ModeHanja;
+    tiny_digital_button MODE_Kanji;
+
+    // TODO(hayden): Capitalization scheme correct for these?
+    tiny_digital_button Attn;
+    tiny_digital_button CrSel;
+    tiny_digital_button ExSel;
+    tiny_digital_button ErEOF;
+    tiny_digital_button Play;
+    tiny_digital_button Zoom;
+    tiny_digital_button NoName;
+    tiny_digital_button PA1;
+} tiny_keyboard;
+
+// T I N Y _ E V E N T ///////////////////////////////////////////////////////////
+
+typedef enum tiny_event_type
 {
-    tiny_event_mouse_event_type Type;
-    u32 X, Y;
-    s16 WheelDelta;
-    f32 NormalizedX, NormalizedY;
-    tiny_event_mouse_button Button;
-    b32 IsDown;
-} tiny_event_mouse;
+    TINY_EVENT_TYPE_KEYBOARD = 1, // NOTE(hayden): Starts at 1 so that 0 can represent no input
+    TINY_EVENT_TYPE_MOUSE,  
+    TINY_EVENT_TYPE_CONTROLLER,
+} tiny_event_type;
 
 typedef struct tiny_event
 {
@@ -247,16 +551,11 @@ typedef struct tiny_event
     {
         struct { tiny_event_keyboard Keyboard; };
         struct { tiny_event_mouse Mouse; };
+        struct { tiny_event_controller Controller; };
     };
 } tiny_event;
 
-typedef struct tiny_digital_button
-{
-    b32 Pressed;
-    b32 Released;
-    b32 Up;
-    b32 Down;
-} tiny_digital_button;
+// P L A T F O R M ///////////////////////////////////////////////////////////////
 
 typedef struct tiny_platform_audio
 {
@@ -270,20 +569,10 @@ typedef struct tiny_platform_audio
 typedef struct tiny_platform
 {
     tiny_event EventQueue[512];
-    int EventQueueIndex;
+    int EventQueueSize;
+    b32 Quit;
 } tiny_platform;
 
-tiny_platform Global_Platform; // TODO(hayden): Is it better for this to be here or the platform layer?
-
-//////
-
-// TODO(hayden): Better name for this?
-// TODO(hayden): tinyengine_platform.c?
-static void
-Tiny_PushInputEvent(tiny_event Event)
-{
-    Global_Platform.EventQueue[Global_Platform.EventQueueIndex] = Event;
-    ++Global_Platform.EventQueueIndex;
-}
+tiny_platform GlobalPlatform; // TODO(hayden): Is it better for this to be here or the platform-specific layer?
 
 #endif // TINYENGINE_PLATFORM_H
